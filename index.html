@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚀 台股強勢突破雷達</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- 引入 ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen">
+    <div id="app" class="max-w-7xl mx-auto p-4 md:p-8">
+        
+        <!-- Header -->
+        <header class="mb-8 flex flex-col md:flex-row justify-between items-end gap-4 border-b pb-4">
+            <div>
+                <h1 class="text-3xl font-bold text-slate-800 flex items-center gap-2">
+                    🎯 即將突破強勢股雷達
+                </h1>
+                <p class="text-slate-500 mt-2">追蹤潛伏中或已突破前高的強勢族群</p>
+            </div>
+            <div class="text-right">
+                <div v-if="updateDate" class="text-sm font-semibold bg-blue-100 text-blue-700 px-3 py-1 rounded-full inline-block mb-2">
+                    資料更新日期: {{ updateDate }}
+                </div>
+                <div v-if="fetchFailed" class="mt-2">
+                    <label class="cursor-pointer bg-slate-800 hover:bg-slate-700 text-white text-sm px-4 py-2 rounded shadow transition inline-block">
+                        📁 手動載入 CSV
+                        <input type="file" accept=".csv" @change="handleManualUpload" class="hidden" />
+                    </label>
+                    <p class="text-xs text-red-500 mt-1">本地端無法自動抓取檔案，請手動上傳 breakout_stocks.csv</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- Loading State -->
+        <div v-if="loading" class="text-center py-20">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p class="mt-4 text-slate-500 font-medium">正在載入雷達數據...</p>
+        </div>
+
+        <!-- Main Workspace -->
+        <div v-else-if="stocks.length > 0">
+            
+            <!-- 篩選列 -->
+            <div class="mb-4 flex flex-wrap gap-6 items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <span class="font-bold text-slate-700">🔍 快速篩選：</span>
+                <label class="flex items-center space-x-2 cursor-pointer hover:bg-slate-50 px-2 py-1 rounded transition">
+                    <input type="radio" v-model="filterStatus" value="ALL" class="w-4 h-4 text-blue-600 focus:ring-blue-500">
+                    <span class="font-medium text-slate-700">全部顯示</span>
+                </label>
+                <label class="flex items-center space-x-2 cursor-pointer hover:bg-red-50 px-2 py-1 rounded transition">
+                    <input type="radio" v-model="filterStatus" value="BREAKOUT" class="w-4 h-4 text-red-600 focus:ring-red-500">
+                    <span class="font-bold text-red-600">🚀 已突破 (>= 0%)</span>
+                </label>
+                <label class="flex items-center space-x-2 cursor-pointer hover:bg-slate-100 px-2 py-1 rounded transition">
+                    <input type="radio" v-model="filterStatus" value="WAITING" class="w-4 h-4 text-slate-500 focus:ring-slate-500">
+                    <span class="font-bold text-slate-600">🥷 潛伏未突破 (< 0%)</span>
+                </label>
+            </div>
+
+            <!-- Main Table -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-4 bg-slate-50 border-b flex justify-between items-center">
+                    <span class="font-bold text-slate-700">符合條件共 {{ filteredStocks.length }} 檔標的</span>
+                    <span class="text-xs text-slate-500">👉 點擊任意行展開查看近 20 日 K 線與均線壓力支撐</span>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse whitespace-nowrap text-sm">
+                        <thead class="bg-slate-800 text-white">
+                            <tr>
+                                <th class="p-4 cursor-pointer hover:bg-slate-700" @click="setSort('Industry')">產業類別 <span v-if="sortKey==='Industry'">{{ sortAsc ? '↑' : '↓' }}</span></th>
+                                <th class="p-4 cursor-pointer hover:bg-slate-700" @click="setSort('Symbol')">股號 <span v-if="sortKey==='Symbol'">{{ sortAsc ? '↑' : '↓' }}</span></th>
+                                <th class="p-4">股名</th>
+                                <th class="p-4 text-right cursor-pointer hover:bg-slate-700" @click="setSort('Latest_Price')">最新價 <span v-if="sortKey==='Latest_Price'">{{ sortAsc ? '↑' : '↓' }}</span></th>
+                                <th class="p-4 text-right cursor-pointer hover:bg-slate-700" @click="setSort('Max_High')">前波高點 <span v-if="sortKey==='Max_High'">{{ sortAsc ? '↑' : '↓' }}</span></th>
+                                <th class="p-4 text-right cursor-pointer hover:bg-slate-700" @click="setSort('Return_5D')">近5日漲幅 <span v-if="sortKey==='Return_5D'">{{ sortAsc ? '↑' : '↓' }}</span></th>
+                                <th class="p-4 text-right cursor-pointer hover:bg-blue-700 bg-blue-800" @click="setSort('Breakout_Pct')">突破幅度 <span v-if="sortKey==='Breakout_Pct'">{{ sortAsc ? '↑' : '↓' }}</span></th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            <template v-for="stock in sortedStocks" :key="stock.Symbol">
+                                <!-- 股票資料列 -->
+                                <tr @click="toggleRow(stock.Symbol)" class="hover:bg-blue-50 cursor-pointer transition" :class="{'bg-blue-50/50': expandedRow === stock.Symbol}">
+                                    <td class="p-4 text-slate-500">{{ stock.Industry }}</td>
+                                    <td class="p-4 font-bold text-blue-600">{{ stock.Symbol }}</td>
+                                    <td class="p-4 font-bold text-slate-800">{{ stock.Name }}</td>
+                                    <td class="p-4 text-right font-medium">{{ stock.Latest_Price }}</td>
+                                    <td class="p-4 text-right text-slate-500">{{ stock.Max_High }}</td>
+                                    <td class="p-4 text-right font-bold" :class="stock.Return_5D >= 0 ? 'text-red-600' : 'text-green-600'">
+                                        {{ stock.Return_5D > 0 ? '+' : '' }}{{ stock.Return_5D }}%
+                                    </td>
+                                    <!-- 突破幅度：正數代表已過前高，負數代表潛伏中 -->
+                                    <td class="p-4 text-right font-bold" :class="stock.Breakout_Pct >= 0 ? 'text-red-600' : 'text-slate-600'">
+                                        <span v-if="stock.Breakout_Pct >= 0" class="bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded mr-1">已突破</span>
+                                        {{ stock.Breakout_Pct > 0 ? '+' : '' }}{{ stock.Breakout_Pct }}%
+                                    </td>
+                                </tr>
+                                
+                                <!-- 展開後的 K 線圖表區塊 -->
+                                <tr v-if="expandedRow === stock.Symbol" class="bg-slate-50 border-b-2 border-blue-200 shadow-inner">
+                                    <td colspan="7" class="p-6">
+                                        <div class="flex justify-between items-center mb-2">
+                                            <h4 class="font-bold text-slate-700 text-lg">📊 {{ stock.Symbol }} {{ stock.Name }} - 近 20 日走勢與均線</h4>
+                                            <button @click.stop="toggleRow(stock.Symbol)" class="text-slate-400 hover:text-red-500">✖ 關閉圖表</button>
+                                        </div>
+                                        <div :id="'chart-' + stock.Symbol" style="width: 100%; height: 420px;" class="bg-white rounded border p-2"></div>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div v-else-if="!loading" class="text-center py-20 text-slate-500">
+            請上傳 breakout_stocks.csv 檔案。
+        </div>
+
+    </div>
+
+    <script>
+        const { createApp, ref, computed, nextTick } = Vue;
+
+        createApp({
+            setup() {
+                const stocks = ref([]);
+                const updateDate = ref('');
+                const loading = ref(true);
+                const fetchFailed = ref(false);
+                const expandedRow = ref(null);
+                
+                // 篩選與排序狀態
+                const filterStatus = ref('ALL'); // 新增：'ALL', 'BREAKOUT', 'WAITING'
+                const sortKey = ref('Breakout_Pct');
+                const sortAsc = ref(false); 
+
+                fetch('breakout_stocks.csv')
+                    .then(response => {
+                        if (!response.ok) throw new Error('File not found');
+                        return response.text();
+                    })
+                    .then(csvText => {
+                        parseCSV(csvText);
+                    })
+                    .catch(err => {
+                        console.warn("無法自動抓取，請手動上傳檔案");
+                        loading.value = false;
+                        fetchFailed.value = true;
+                    });
+
+                const handleManualUpload = (event) => {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    loading.value = true;
+                    fetchFailed.value = false;
+                    
+                    const reader = new FileReader();
+                    reader.onload = (e) => parseCSV(e.target.result);
+                    reader.readAsText(file);
+                };
+
+                const parseCSV = (csvText) => {
+                    Papa.parse(csvText, {
+                        header: true,
+                        skipEmptyLines: true,
+                        complete: (results) => {
+                            if (results.data.length > 0 && results.data[0].Symbol) {
+                                updateDate.value = results.data[0].Update_Date || '未知';
+                                stocks.value = results.data.map(row => ({
+                                    ...row,
+                                    Latest_Price: parseFloat(row.Latest_Price),
+                                    Max_High: parseFloat(row.Max_High),
+                                    Return_5D: parseFloat(row.Return_5D || 0),
+                                    Breakout_Pct: parseFloat(row.Breakout_Pct || 0),
+                                    MA5: parseFloat(row.MA5 || 0),
+                                    MA10: parseFloat(row.MA10 || 0),
+                                    MA20: parseFloat(row.MA20 || 0)
+                                }));
+                            }
+                            loading.value = false;
+                        }
+                    });
+                };
+
+                // 新增：根據狀態篩選股票
+                const filteredStocks = computed(() => {
+                    return stocks.value.filter(stock => {
+                        if (filterStatus.value === 'BREAKOUT') return stock.Breakout_Pct >= 0;
+                        if (filterStatus.value === 'WAITING') return stock.Breakout_Pct < 0;
+                        return true;
+                    });
+                });
+
+                // 修改：基於已過濾的資料進行排序
+                const sortedStocks = computed(() => {
+                    return [...filteredStocks.value].sort((a, b) => {
+                        let valA = a[sortKey.value];
+                        let valB = b[sortKey.value];
+                        if (valA === valB) return 0;
+                        let comp = valA > valB ? 1 : -1;
+                        return sortAsc.value ? comp : -comp;
+                    });
+                });
+
+                const setSort = (key) => {
+                    if (sortKey.value === key) sortAsc.value = !sortAsc.value;
+                    else { sortKey.value = key; sortAsc.value = false; }
+                };
+
+                const toggleRow = (symbol) => {
+                    if (expandedRow.value === symbol) {
+                        expandedRow.value = null;
+                    } else {
+                        expandedRow.value = symbol;
+                        nextTick(() => {
+                            renderChart(symbol);
+                        });
+                    }
+                };
+
+                const renderChart = (symbol) => {
+                    const stock = stocks.value.find(s => s.Symbol === symbol);
+                    if (!stock || !stock.Klines) return;
+                    
+                    const klines = JSON.parse(stock.Klines);
+                    const chartDom = document.getElementById('chart-' + symbol);
+                    
+                    let myChart = echarts.getInstanceByDom(chartDom);
+                    if (myChart) myChart.dispose();
+                    myChart = echarts.init(chartDom);
+                    
+                    const categoryData = klines.map(k => k.date);
+                    const values = klines.map(k => [k.open, k.close, k.low, k.high]);
+                    
+                    const volumes = klines.map(k => {
+                        const isUp = k.close >= k.open;
+                        return {
+                            value: k.volume,
+                            itemStyle: { color: isUp ? '#ef4444' : '#22c55e' }
+                        };
+                    });
+
+                    // 建構均線資料 (5MA 藍, 10MA 橘, 20MA 紫)
+                    const markLineData = [];
+                    const len = categoryData.length;
+
+                    if (stock.MA5) {
+                        markLineData.push([
+                            { coord: [categoryData[Math.max(0, len - 5)], stock.MA5], symbol: 'none', lineStyle: { color: '#3b82f6', width: 2, type: 'dashed', opacity: 0.6 } },
+                            { coord: [categoryData[len - 1], stock.MA5], symbol: 'none', label: { formatter: '5MA', position: 'end', color: '#3b82f6', fontWeight: 'bold' } }
+                        ]);
+                    }
+                    if (stock.MA10) {
+                        markLineData.push([
+                            { coord: [categoryData[Math.max(0, len - 10)], stock.MA10], symbol: 'none', lineStyle: { color: '#f59e0b', width: 2, type: 'dashed', opacity: 0.6 } },
+                            { coord: [categoryData[len - 1], stock.MA10], symbol: 'none', label: { formatter: '10MA', position: 'end', color: '#f59e0b', fontWeight: 'bold' } }
+                        ]);
+                    }
+                    if (stock.MA20) {
+                        markLineData.push([
+                            { coord: [categoryData[0], stock.MA20], symbol: 'none', lineStyle: { color: '#8b5cf6', width: 2, type: 'dashed', opacity: 0.6 } },
+                            { coord: [categoryData[len - 1], stock.MA20], symbol: 'none', label: { formatter: '20MA', position: 'end', color: '#8b5cf6', fontWeight: 'bold' } }
+                        ]);
+                    }
+
+                    const option = {
+                        tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+                        axisPointer: { link: { xAxisIndex: 'all' } },
+                        grid: [
+                            { left: '8%', right: '8%', top: '5%', height: '60%' },
+                            { left: '8%', right: '8%', top: '72%', height: '20%' }
+                        ],
+                        xAxis: [
+                            { type: 'category', data: categoryData, boundaryGap: false, axisLine: { onZero: false }, splitLine: { show: false }, min: 'dataMin', max: 'dataMax' },
+                            { type: 'category', gridIndex: 1, data: categoryData, boundaryGap: false, axisLine: { onZero: false }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false }, min: 'dataMin', max: 'dataMax' }
+                        ],
+                        yAxis: [
+                            { scale: true, splitArea: { show: true } },
+                            { scale: true, gridIndex: 1, splitNumber: 2, axisLabel: { show: false }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false } }
+                        ],
+                        series: [
+                            {
+                                name: 'K線',
+                                type: 'candlestick',
+                                data: values,
+                                itemStyle: { color: '#ef4444', color0: '#22c55e', borderColor: '#ef4444', borderColor0: '#22c55e' },
+                                markLine: {
+                                    data: markLineData,
+                                    animation: false
+                                }
+                            },
+                            {
+                                name: '成交量',
+                                type: 'bar',
+                                xAxisIndex: 1,
+                                yAxisIndex: 1,
+                                data: volumes
+                            }
+                        ]
+                    };
+                    
+                    myChart.setOption(option);
+                    window.addEventListener('resize', () => myChart.resize());
+                };
+
+                return {
+                    stocks, updateDate, loading, fetchFailed, expandedRow,
+                    filterStatus, filteredStocks, // 新增匯出
+                    sortKey, sortAsc, sortedStocks, setSort,
+                    handleManualUpload, toggleRow
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

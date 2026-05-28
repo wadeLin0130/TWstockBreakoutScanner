@@ -42,25 +42,48 @@
             
             <!-- 進階篩選列 -->
             <div class="mb-6 bg-white p-5 rounded shadow-sm border border-gray-200">
-                <div class="text-sm font-bold text-gray-700 mb-4 border-b pb-2">進階條件篩選</div>
+                <div class="flex justify-between items-center mb-4 border-b border-gray-100 pb-2">
+                    <div class="text-sm font-bold text-gray-700">進階條件篩選</div>
+                    <div class="flex gap-2">
+                        <button @click="applyQuickFilter('pending')" class="text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition font-medium">
+                            強勢即將突破
+                        </button>
+                        <button @click="applyQuickFilter('just_breakout')" class="text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition font-medium">
+                            強勢剛突破
+                        </button>
+                        <button @click="applyQuickFilter('continuous')" class="text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition font-medium">
+                            持續突破
+                        </button>
+                    </div>
+                </div>
                 
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                     <!-- 距前高天數 -->
                     <div class="flex flex-col">
                         <label class="text-xs text-gray-500 mb-1">距前高天數 (天)</label>
-                        <div class="flex items-center space-x-2">
+                        <div class="flex items-center space-x-1">
                             <input type="number" v-model="filter.daysMin" placeholder="Min" class="w-full p-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-gray-500">
-                            <span class="text-gray-400">~</span>
+                            <span class="text-gray-400">-</span>
                             <input type="number" v-model="filter.daysMax" placeholder="Max" class="w-full p-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-gray-500">
+                        </div>
+                    </div>
+
+                    <!-- 當日漲幅 -->
+                    <div class="flex flex-col">
+                        <label class="text-xs text-gray-500 mb-1">當日漲幅 (%)</label>
+                        <div class="flex items-center space-x-1">
+                            <input type="number" v-model="filter.todayReturnMin" placeholder="Min" class="w-full p-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-gray-500">
+                            <span class="text-gray-400">-</span>
+                            <input type="number" v-model="filter.todayReturnMax" placeholder="Max" class="w-full p-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-gray-500">
                         </div>
                     </div>
                     
                     <!-- 近5日漲幅 -->
                     <div class="flex flex-col">
                         <label class="text-xs text-gray-500 mb-1">近 5 日漲幅 (%)</label>
-                        <div class="flex items-center space-x-2">
+                        <div class="flex items-center space-x-1">
                             <input type="number" v-model="filter.returnMin" placeholder="Min" class="w-full p-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-gray-500">
-                            <span class="text-gray-400">~</span>
+                            <span class="text-gray-400">-</span>
                             <input type="number" v-model="filter.returnMax" placeholder="Max" class="w-full p-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-gray-500">
                         </div>
                     </div>
@@ -68,9 +91,9 @@
                     <!-- 已突破幅度 -->
                     <div class="flex flex-col">
                         <label class="text-xs text-gray-500 mb-1">已突破幅度 (%)</label>
-                        <div class="flex items-center space-x-2">
+                        <div class="flex items-center space-x-1">
                             <input type="number" v-model="filter.breakoutMin" placeholder="Min" class="w-full p-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-gray-500">
-                            <span class="text-gray-400">~</span>
+                            <span class="text-gray-400">-</span>
                             <input type="number" v-model="filter.breakoutMax" placeholder="Max" class="w-full p-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-gray-500">
                         </div>
                     </div>
@@ -78,9 +101,9 @@
                     <!-- 距前高幅度 -->
                     <div class="flex flex-col">
                         <label class="text-xs text-gray-500 mb-1">距前高幅度 (%)</label>
-                        <div class="flex items-center space-x-2">
+                        <div class="flex items-center space-x-1">
                             <input type="number" v-model="filter.distanceMin" placeholder="Min" class="w-full p-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-gray-500">
-                            <span class="text-gray-400">~</span>
+                            <span class="text-gray-400">-</span>
                             <input type="number" v-model="filter.distanceMax" placeholder="Max" class="w-full p-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-gray-500">
                         </div>
                     </div>
@@ -110,6 +133,7 @@
                                 <th class="p-3 font-medium text-right cursor-pointer hover:bg-gray-700" @click="setSort('Latest_Price')">最新價 <span v-if="sortKey==='Latest_Price'">{{ sortAsc ? '↑' : '↓' }}</span></th>
                                 <th class="p-3 font-medium text-right cursor-pointer hover:bg-gray-700" @click="setSort('Max_High')">前波高點 <span v-if="sortKey==='Max_High'">{{ sortAsc ? '↑' : '↓' }}</span></th>
                                 <th class="p-3 font-medium text-right cursor-pointer hover:bg-gray-700" @click="setSort('Days_Since_High')">距前高天數 <span v-if="sortKey==='Days_Since_High'">{{ sortAsc ? '↑' : '↓' }}</span></th>
+                                <th class="p-3 font-medium text-right cursor-pointer hover:bg-gray-700" @click="setSort('Today_Return')">當日漲幅 <span v-if="sortKey==='Today_Return'">{{ sortAsc ? '↑' : '↓' }}</span></th>
                                 <th class="p-3 font-medium text-right cursor-pointer hover:bg-gray-700" @click="setSort('Return_5D')">近 5 日漲幅 <span v-if="sortKey==='Return_5D'">{{ sortAsc ? '↑' : '↓' }}</span></th>
                                 <th class="p-3 font-medium text-right cursor-pointer hover:bg-gray-700" @click="setSort('Breakout_Margin')">已突破幅度 <span v-if="sortKey==='Breakout_Margin'">{{ sortAsc ? '↑' : '↓' }}</span></th>
                                 <th class="p-3 font-medium text-right cursor-pointer hover:bg-gray-700" @click="setSort('Distance_To_High')">距前高幅度 <span v-if="sortKey==='Distance_To_High'">{{ sortAsc ? '↑' : '↓' }}</span></th>
@@ -124,22 +148,27 @@
                                     <td class="p-3 text-right text-gray-800">{{ stock.Latest_Price }}</td>
                                     <td class="p-3 text-right text-gray-500">{{ stock.Max_High }}</td>
                                     <td class="p-3 text-right text-gray-700">{{ stock.Days_Since_High }} 天</td>
+                                    <td class="p-3 text-right font-medium" :class="stock.Today_Return >= 0 ? 'text-red-600' : 'text-green-600'">
+                                        {{ stock.Today_Return > 0 ? '+' : '' }}{{ stock.Today_Return }}%
+                                    </td>
                                     <td class="p-3 text-right font-medium" :class="stock.Return_5D >= 0 ? 'text-red-600' : 'text-green-600'">
                                         {{ stock.Return_5D > 0 ? '+' : '' }}{{ stock.Return_5D }}%
                                     </td>
+                                    <!-- 已突破幅度：非空值則顯示 -->
                                     <td class="p-3 text-right font-medium text-red-600">
-                                        {{ stock.Breakout_Margin !== null ? '+' + stock.Breakout_Margin + '%' : '' }}
+                                        {{ stock.Breakout_Margin !== null && stock.Breakout_Margin !== '' ? '+' + stock.Breakout_Margin + '%' : '' }}
                                     </td>
+                                    <!-- 距前高幅度：非空值則顯示 -->
                                     <td class="p-3 text-right font-medium text-gray-600">
-                                        {{ stock.Distance_To_High !== null ? stock.Distance_To_High + '%' : '' }}
+                                        {{ stock.Distance_To_High !== null && stock.Distance_To_High !== '' ? stock.Distance_To_High + '%' : '' }}
                                     </td>
                                 </tr>
                                 
                                 <tr v-if="expandedRow === stock.Symbol" class="bg-gray-50 shadow-inner">
-                                    <td colspan="9" class="p-6 border-b-2 border-gray-300">
+                                    <td colspan="10" class="p-6 border-b-2 border-gray-300">
                                         <div class="flex justify-between items-center mb-4">
                                             <h4 class="font-bold text-gray-800">代號 {{ stock.Symbol }} {{ stock.Name }} - 近 20 日技術線圖</h4>
-                                            <button @click.stop="toggleRow(stock.Symbol)" class="text-sm text-gray-400 hover:text-gray-700">關閉</button>
+                                            <button @click.stop="toggleRow(stock.Symbol)" class="text-sm text-gray-400 hover:text-gray-700">關閉圖表</button>
                                         </div>
                                         <div :id="'chart-' + stock.Symbol" style="width: 100%; height: 420px;" class="bg-white rounded border border-gray-200 p-2"></div>
                                     </td>
@@ -170,14 +199,11 @@
                 
                 // 篩選條件模型
                 const filter = ref({
-                    daysMin: null,
-                    daysMax: null,
-                    returnMin: null,
-                    returnMax: null,
-                    breakoutMin: null,
-                    breakoutMax: null,
-                    distanceMin: null,
-                    distanceMax: null
+                    daysMin: null, daysMax: null,
+                    todayReturnMin: null, todayReturnMax: null,
+                    returnMin: null, returnMax: null,
+                    breakoutMin: null, breakoutMax: null,
+                    distanceMin: null, distanceMax: null
                 });
 
                 const sortKey = ref('Days_Since_High');
@@ -216,15 +242,15 @@
                             if (results.data.length > 0 && results.data[0].Symbol) {
                                 updateDate.value = results.data[0].Update_Date || '-';
                                 stocks.value = results.data.map(row => {
-                                    // 處理空值
-                                    const breakout = row.Breakout_Margin ? parseFloat(row.Breakout_Margin) : null;
-                                    const distance = row.Distance_To_High ? parseFloat(row.Distance_To_High) : null;
+                                    const breakout = row.Breakout_Margin && row.Breakout_Margin !== '' ? parseFloat(row.Breakout_Margin) : null;
+                                    const distance = row.Distance_To_High && row.Distance_To_High !== '' ? parseFloat(row.Distance_To_High) : null;
                                     
                                     return {
                                         ...row,
                                         Latest_Price: parseFloat(row.Latest_Price),
                                         Max_High: parseFloat(row.Max_High),
                                         Days_Since_High: parseInt(row.Days_Since_High || 0),
+                                        Today_Return: parseFloat(row.Today_Return || 0),
                                         Return_5D: parseFloat(row.Return_5D || 0),
                                         Breakout_Margin: breakout,
                                         Distance_To_High: distance,
@@ -242,10 +268,29 @@
                 const resetFilters = () => {
                     filter.value = {
                         daysMin: null, daysMax: null,
+                        todayReturnMin: null, todayReturnMax: null,
                         returnMin: null, returnMax: null,
                         breakoutMin: null, breakoutMax: null,
                         distanceMin: null, distanceMax: null
                     };
+                };
+
+                // 快速篩選按鈕邏輯
+                const applyQuickFilter = (type) => {
+                    resetFilters();
+                    if (type === 'pending') {
+                        filter.value.daysMin = 10;
+                        filter.value.returnMin = 10;
+                        filter.value.distanceMax = 5; // 距離前高幅度 <= 5% (即將突破)
+                    } else if (type === 'just_breakout') {
+                        filter.value.daysMin = 10;
+                        filter.value.returnMin = 10;
+                        filter.value.breakoutMin = 2; // 已突破幅度 >= 2%
+                    } else if (type === 'continuous') {
+                        filter.value.daysMax = 3;
+                        filter.value.returnMin = 10;
+                        filter.value.breakoutMin = 0; // 已突破幅度 >= 0%
+                    }
                 };
 
                 // 篩選邏輯
@@ -253,15 +298,15 @@
                     return stocks.value.filter(stock => {
                         const f = filter.value;
                         
-                        // 距前高天數
                         if (f.daysMin !== null && f.daysMin !== '' && stock.Days_Since_High < parseFloat(f.daysMin)) return false;
                         if (f.daysMax !== null && f.daysMax !== '' && stock.Days_Since_High > parseFloat(f.daysMax)) return false;
                         
-                        // 近5日漲幅
+                        if (f.todayReturnMin !== null && f.todayReturnMin !== '' && stock.Today_Return < parseFloat(f.todayReturnMin)) return false;
+                        if (f.todayReturnMax !== null && f.todayReturnMax !== '' && stock.Today_Return > parseFloat(f.todayReturnMax)) return false;
+                        
                         if (f.returnMin !== null && f.returnMin !== '' && stock.Return_5D < parseFloat(f.returnMin)) return false;
                         if (f.returnMax !== null && f.returnMax !== '' && stock.Return_5D > parseFloat(f.returnMax)) return false;
                         
-                        // 已突破幅度
                         const isBreakoutSet = (f.breakoutMin !== null && f.breakoutMin !== '') || (f.breakoutMax !== null && f.breakoutMax !== '');
                         if (isBreakoutSet) {
                             if (stock.Breakout_Margin === null) return false;
@@ -269,7 +314,6 @@
                             if (f.breakoutMax !== null && f.breakoutMax !== '' && stock.Breakout_Margin > parseFloat(f.breakoutMax)) return false;
                         }
 
-                        // 距前高幅度
                         const isDistanceSet = (f.distanceMin !== null && f.distanceMin !== '') || (f.distanceMax !== null && f.distanceMax !== '');
                         if (isDistanceSet) {
                             if (stock.Distance_To_High === null) return false;
@@ -281,15 +325,14 @@
                     });
                 });
 
-                // 排序邏輯處理 (包含空值的防呆處置)
+                // 排序邏輯處理
                 const sortedStocks = computed(() => {
                     return [...filteredStocks.value].sort((a, b) => {
                         let valA = a[sortKey.value];
                         let valB = b[sortKey.value];
                         
-                        // 將 null 轉為極端值以利排序
-                        if (valA === null) valA = sortAsc.value ? Infinity : -Infinity;
-                        if (valB === null) valB = sortAsc.value ? Infinity : -Infinity;
+                        if (valA === null || valA === '') valA = sortAsc.value ? Infinity : -Infinity;
+                        if (valB === null || valB === '') valB = sortAsc.value ? Infinity : -Infinity;
                         
                         if (valA === valB) return 0;
                         let comp = valA > valB ? 1 : -1;
@@ -331,7 +374,7 @@
                         const isUp = k.close >= k.open;
                         return {
                             value: k.volume,
-                            itemStyle: { color: isUp ? '#ef4444' : '#22c55e' }
+                            itemStyle: { color: isUp ? '#dc2626' : '#16a34a' }
                         };
                     });
 
@@ -354,14 +397,14 @@
                     }
                     if (stock.MA10) {
                         markLineData.push([
-                            { coord: [categoryData[Math.max(0, len - 10)], stock.MA10], symbol: 'none', lineStyle: { color: '#f59e0b', width: 2, type: 'dashed', opacity: 0.6 } },
-                            { coord: [categoryData[len - 1], stock.MA10], symbol: 'none', label: { formatter: '10MA', position: 'end', color: '#f59e0b', fontWeight: 'bold' } }
+                            { coord: [categoryData[Math.max(0, len - 10)], stock.MA10], symbol: 'none', lineStyle: { color: '#d97706', width: 2, type: 'dashed', opacity: 0.6 } },
+                            { coord: [categoryData[len - 1], stock.MA10], symbol: 'none', label: { formatter: '10MA', position: 'end', color: '#d97706', fontWeight: 'bold' } }
                         ]);
                     }
                     if (stock.MA20) {
                         markLineData.push([
-                            { coord: [categoryData[0], stock.MA20], symbol: 'none', lineStyle: { color: '#8b5cf6', width: 2, type: 'dashed', opacity: 0.6 } },
-                            { coord: [categoryData[len - 1], stock.MA20], symbol: 'none', label: { formatter: '20MA', position: 'end', color: '#8b5cf6', fontWeight: 'bold' } }
+                            { coord: [categoryData[0], stock.MA20], symbol: 'none', lineStyle: { color: '#7c3aed', width: 2, type: 'dashed', opacity: 0.6 } },
+                            { coord: [categoryData[len - 1], stock.MA20], symbol: 'none', label: { formatter: '20MA', position: 'end', color: '#7c3aed', fontWeight: 'bold' } }
                         ]);
                     }
 
@@ -385,7 +428,7 @@
                                 name: 'K線',
                                 type: 'candlestick',
                                 data: values,
-                                itemStyle: { color: '#ef4444', color0: '#22c55e', borderColor: '#ef4444', borderColor0: '#22c55e' },
+                                itemStyle: { color: '#dc2626', color0: '#16a34a', borderColor: '#dc2626', borderColor0: '#16a34a' },
                                 markLine: { data: markLineData, animation: false }
                             },
                             {
@@ -404,7 +447,7 @@
 
                 return {
                     stocks, updateDate, loading, fetchFailed, expandedRow,
-                    filter, filteredStocks, 
+                    filter, filteredStocks, applyQuickFilter,
                     sortKey, sortAsc, sortedStocks, setSort, resetFilters,
                     handleManualUpload, toggleRow
                 };

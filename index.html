@@ -19,9 +19,16 @@
                 <p class="text-gray-500 mt-1 text-sm">篩選條件：最新收盤價距離近期最高價 &lt; 10% 以內之標的</p>
             </div>
             <div class="text-right">
-                <div v-if="updateDate" class="text-sm font-medium bg-gray-200 text-gray-700 px-3 py-1 rounded inline-block mb-2">
-                    資料日期: {{ updateDate }}
+                <div class="flex items-center justify-end gap-3 mb-2">
+                    <!-- 新增：強制重整按鈕 -->
+                    <button @click="fetchData" class="text-sm font-medium bg-white border border-gray-300 hover:bg-gray-50 text-gray-600 px-3 py-1 rounded transition flex items-center gap-1 shadow-sm">
+                        <span>🔄</span> 重新整理
+                    </button>
+                    <div v-if="updateDate" class="text-sm font-medium bg-gray-200 text-gray-700 px-3 py-1 rounded inline-block">
+                        資料日期: {{ updateDate }}
+                    </div>
                 </div>
+                
                 <div v-if="fetchFailed" class="mt-2">
                     <label class="cursor-pointer bg-gray-700 hover:bg-gray-800 text-white text-sm px-4 py-2 rounded transition inline-block">
                         手動載入資料 (CSV)
@@ -187,7 +194,7 @@
     </div>
 
     <script>
-        const { createApp, ref, computed, nextTick } = Vue;
+        const { createApp, ref, computed, nextTick, onMounted } = Vue;
 
         createApp({
             setup() {
@@ -197,7 +204,6 @@
                 const fetchFailed = ref(false);
                 const expandedRow = ref(null);
                 
-                // 篩選條件模型
                 const filter = ref({
                     daysMin: null, daysMax: null,
                     todayReturnMin: null, todayReturnMax: null,
@@ -209,19 +215,33 @@
                 const sortKey = ref('Days_Since_High');
                 const sortAsc = ref(true); 
 
-                fetch('breakout_stocks.csv')
-                    .then(response => {
-                        if (!response.ok) throw new Error('File not found');
-                        return response.text();
-                    })
-                    .then(csvText => {
-                        parseCSV(csvText);
-                    })
-                    .catch(err => {
-                        console.warn("自動抓取失敗，等待手動上傳。");
-                        loading.value = false;
-                        fetchFailed.value = true;
-                    });
+                // 獨立拉出抓取資料的 function，加上時間戳記反快取
+                const fetchData = () => {
+                    loading.value = true;
+                    fetchFailed.value = false;
+                    
+                    // 加上 ?t=時間戳記，確保瀏覽器每次都抓最新的，不會用快取
+                    const url = `breakout_stocks.csv?t=${new Date().getTime()}`;
+                    
+                    fetch(url)
+                        .then(response => {
+                            if (!response.ok) throw new Error('File not found');
+                            return response.text();
+                        })
+                        .then(csvText => {
+                            parseCSV(csvText);
+                        })
+                        .catch(err => {
+                            console.warn("自動抓取失敗，等待手動上傳。");
+                            loading.value = false;
+                            fetchFailed.value = true;
+                        });
+                };
+
+                // 網頁載入時自動執行一次
+                onMounted(() => {
+                    fetchData();
+                });
 
                 const handleManualUpload = (event) => {
                     const file = event.target.files[0];
@@ -275,25 +295,23 @@
                     };
                 };
 
-                // 快速篩選按鈕邏輯
                 const applyQuickFilter = (type) => {
                     resetFilters();
                     if (type === 'pending') {
                         filter.value.daysMin = 10;
                         filter.value.returnMin = 10;
-                        filter.value.distanceMax = 5; // 距離前高幅度 <= 5% (即將突破)
+                        filter.value.distanceMax = 5; 
                     } else if (type === 'just_breakout') {
                         filter.value.daysMin = 10;
                         filter.value.returnMin = 10;
-                        filter.value.breakoutMin = 2; // 已突破幅度 >= 2%
+                        filter.value.breakoutMin = 2; 
                     } else if (type === 'continuous') {
                         filter.value.daysMax = 3;
                         filter.value.returnMin = 10;
-                        filter.value.breakoutMin = 0; // 已突破幅度 >= 0%
+                        filter.value.breakoutMin = 0; 
                     }
                 };
 
-                // 篩選邏輯
                 const filteredStocks = computed(() => {
                     return stocks.value.filter(stock => {
                         const f = filter.value;
@@ -325,7 +343,6 @@
                     });
                 });
 
-                // 排序邏輯處理
                 const sortedStocks = computed(() => {
                     return [...filteredStocks.value].sort((a, b) => {
                         let valA = a[sortKey.value];
@@ -447,7 +464,7 @@
 
                 return {
                     stocks, updateDate, loading, fetchFailed, expandedRow,
-                    filter, filteredStocks, applyQuickFilter,
+                    filter, filteredStocks, applyQuickFilter, fetchData,
                     sortKey, sortAsc, sortedStocks, setSort, resetFilters,
                     handleManualUpload, toggleRow
                 };

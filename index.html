@@ -5,32 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>台股強勢突破追蹤系統</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {}
+            }
+        }
+    </script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 </head>
-<body class="bg-gray-100 text-gray-800 font-sans min-h-screen">
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans min-h-screen transition-colors duration-200">
     <div id="app" class="max-w-7xl mx-auto p-4 md:p-8">
         
         <!-- Header -->
-        <header class="mb-6 flex flex-col md:flex-row justify-between items-end gap-4 border-b border-gray-300 pb-4">
+        <header class="mb-6 flex flex-col md:flex-row justify-between items-end gap-4 border-b border-gray-300 dark:border-gray-700 pb-4">
             <div>
-                <h1 class="text-2xl font-bold text-gray-900 tracking-wide">台股強勢突破追蹤系統</h1>
-                <p class="text-gray-500 mt-1 text-sm">篩選條件：最新收盤價距離近期最高價 &lt; 10% 以內之標的</p>
+                <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-wide">台股強勢突破追蹤系統</h1>
+                <p class="text-gray-500 dark:text-gray-400 mt-1 text-sm">篩選條件：最新收盤價距離近期最高價 &lt; 10% 以內之標的</p>
             </div>
             <div class="text-right">
                 <div class="flex items-center justify-end gap-3 mb-2">
-                    <!-- 新增：強制重整按鈕 -->
-                    <button @click="fetchData" class="text-sm font-medium bg-white border border-gray-300 hover:bg-gray-50 text-gray-600 px-3 py-1 rounded transition flex items-center gap-1 shadow-sm">
-                        <span>🔄</span> 重新整理
+                    <button @click="toggleDarkMode" class="text-sm font-medium bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 px-3 py-1 rounded transition flex items-center shadow-sm">
+                        {{ isDarkMode ? '切換明亮模式' : '切換深色模式' }}
                     </button>
-                    <div v-if="updateDate" class="text-sm font-medium bg-gray-200 text-gray-700 px-3 py-1 rounded inline-block">
+                    <button @click="fetchData" class="text-sm font-medium bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 px-3 py-1 rounded transition flex items-center shadow-sm">
+                        重新整理資料
+                    </button>
+                    <div v-if="updateDate" class="text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-3 py-1 rounded inline-block">
                         資料日期: {{ updateDate }}
                     </div>
                 </div>
                 
                 <div v-if="fetchFailed" class="mt-2">
-                    <label class="cursor-pointer bg-gray-700 hover:bg-gray-800 text-white text-sm px-4 py-2 rounded transition inline-block">
+                    <label class="cursor-pointer bg-gray-700 hover:bg-gray-800 dark:bg-gray-600 dark:hover:bg-gray-500 text-white text-sm px-4 py-2 rounded transition inline-block">
                         手動載入資料 (CSV)
                         <input type="file" accept=".csv" @change="handleManualUpload" class="hidden" />
                     </label>
@@ -40,161 +50,232 @@
 
         <!-- Loading State -->
         <div v-if="loading" class="text-center py-20">
-            <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-gray-600 mx-auto"></div>
-            <p class="mt-4 text-gray-500 text-sm">系統讀取中...</p>
+            <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-gray-600 dark:border-gray-400 mx-auto"></div>
+            <p class="mt-4 text-gray-500 dark:text-gray-400 text-sm">系統讀取中...</p>
         </div>
 
         <!-- Main Workspace -->
         <div v-else-if="stocks.length > 0">
             
             <!-- 進階篩選列 -->
-            <div class="mb-6 bg-white p-5 rounded shadow-sm border border-gray-200">
-                <div class="flex justify-between items-center mb-4 border-b border-gray-100 pb-2">
-                    <div class="text-sm font-bold text-gray-700">進階條件篩選</div>
-                    <div class="flex gap-2">
-                        <button @click="applyQuickFilter('pending')" class="text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition font-medium">
+            <div class="mb-6 bg-white dark:bg-gray-800 p-5 rounded shadow-sm border border-gray-200 dark:border-gray-700">
+                <div class="flex flex-col lg:flex-row justify-between lg:items-center mb-4 border-b border-gray-100 dark:border-gray-700 pb-3 gap-3">
+                    <div class="text-sm font-bold text-gray-700 dark:text-gray-300">進階條件篩選</div>
+                    <div class="flex flex-wrap gap-2">
+                        <button @click="applyQuickFilter('pending')" class="text-xs px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition font-medium">
                             強勢即將突破
                         </button>
-                        <button @click="applyQuickFilter('just_breakout')" class="text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition font-medium">
+                        <button @click="applyQuickFilter('just_breakout')" class="text-xs px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition font-medium">
                             強勢剛突破
                         </button>
-                        <button @click="applyQuickFilter('continuous')" class="text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded transition font-medium">
+                        <button @click="applyQuickFilter('continuous')" class="text-xs px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition font-medium">
                             持續突破
                         </button>
                     </div>
                 </div>
                 
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <!-- 距前高天數 -->
                     <div class="flex flex-col">
-                        <label class="text-xs text-gray-500 mb-1">距前高天數 (天)</label>
+                        <label class="text-xs text-gray-500 dark:text-gray-400 mb-1">距前高天數 (天)</label>
                         <div class="flex items-center space-x-1">
-                            <input type="number" v-model="filter.daysMin" placeholder="Min" class="w-full p-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-gray-500">
+                            <input type="number" v-model="filter.daysMin" placeholder="Min" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:border-gray-500">
                             <span class="text-gray-400">-</span>
-                            <input type="number" v-model="filter.daysMax" placeholder="Max" class="w-full p-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-gray-500">
+                            <input type="number" v-model="filter.daysMax" placeholder="Max" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:border-gray-500">
                         </div>
                     </div>
 
-                    <!-- 當日漲幅 -->
-                    <div class="flex flex-col">
-                        <label class="text-xs text-gray-500 mb-1">當日漲幅 (%)</label>
-                        <div class="flex items-center space-x-1">
-                            <input type="number" v-model="filter.todayReturnMin" placeholder="Min" class="w-full p-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-gray-500">
-                            <span class="text-gray-400">-</span>
-                            <input type="number" v-model="filter.todayReturnMax" placeholder="Max" class="w-full p-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-gray-500">
-                        </div>
-                    </div>
-                    
-                    <!-- 近5日漲幅 -->
-                    <div class="flex flex-col">
-                        <label class="text-xs text-gray-500 mb-1">近 5 日漲幅 (%)</label>
-                        <div class="flex items-center space-x-1">
-                            <input type="number" v-model="filter.returnMin" placeholder="Min" class="w-full p-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-gray-500">
-                            <span class="text-gray-400">-</span>
-                            <input type="number" v-model="filter.returnMax" placeholder="Max" class="w-full p-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-gray-500">
-                        </div>
-                    </div>
-                    
                     <!-- 已突破幅度 -->
                     <div class="flex flex-col">
-                        <label class="text-xs text-gray-500 mb-1">已突破幅度 (%)</label>
+                        <label class="text-xs text-gray-500 dark:text-gray-400 mb-1">已突破幅度 (%)</label>
                         <div class="flex items-center space-x-1">
-                            <input type="number" v-model="filter.breakoutMin" placeholder="Min" class="w-full p-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-gray-500">
+                            <input type="number" v-model="filter.breakoutMin" placeholder="Min" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:border-gray-500">
                             <span class="text-gray-400">-</span>
-                            <input type="number" v-model="filter.breakoutMax" placeholder="Max" class="w-full p-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-gray-500">
+                            <input type="number" v-model="filter.breakoutMax" placeholder="Max" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:border-gray-500">
                         </div>
                     </div>
 
                     <!-- 距前高幅度 -->
                     <div class="flex flex-col">
-                        <label class="text-xs text-gray-500 mb-1">距前高幅度 (%)</label>
+                        <label class="text-xs text-gray-500 dark:text-gray-400 mb-1">距前高幅度 (%)</label>
                         <div class="flex items-center space-x-1">
-                            <input type="number" v-model="filter.distanceMin" placeholder="Min" class="w-full p-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-gray-500">
+                            <input type="number" v-model="filter.distanceMin" placeholder="Min" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:border-gray-500">
                             <span class="text-gray-400">-</span>
-                            <input type="number" v-model="filter.distanceMax" placeholder="Max" class="w-full p-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:border-gray-500">
+                            <input type="number" v-model="filter.distanceMax" placeholder="Max" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:border-gray-500">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 展開式漲幅篩選 -->
+                <div class="mt-4 border-t border-gray-100 dark:border-gray-700 pt-3">
+                    <button @click="showReturnFilters = !showReturnFilters" class="text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition">
+                        {{ showReturnFilters ? '收合各期間漲幅篩選 ▲' : '展開各期間漲幅篩選 ▼' }}
+                    </button>
+                    
+                    <div v-show="showReturnFilters" class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4 bg-gray-50 dark:bg-gray-700/30 p-3 rounded border border-gray-100 dark:border-gray-700">
+                        <!-- 當日漲幅 -->
+                        <div class="flex flex-col">
+                            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1">當日漲幅 (%)</label>
+                            <div class="flex items-center space-x-1">
+                                <input type="number" v-model="filter.todayReturnMin" placeholder="Min" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none">
+                                <span class="text-gray-400">-</span>
+                                <input type="number" v-model="filter.todayReturnMax" placeholder="Max" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none">
+                            </div>
+                        </div>
+                        <!-- 近5日漲幅 -->
+                        <div class="flex flex-col">
+                            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1">近 5 日漲幅 (%)</label>
+                            <div class="flex items-center space-x-1">
+                                <input type="number" v-model="filter.returnMin" placeholder="Min" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none">
+                                <span class="text-gray-400">-</span>
+                                <input type="number" v-model="filter.returnMax" placeholder="Max" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none">
+                            </div>
+                        </div>
+                        <!-- 近10日漲幅 -->
+                        <div class="flex flex-col">
+                            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1">近 10 日漲幅 (%)</label>
+                            <div class="flex items-center space-x-1">
+                                <input type="number" v-model="filter.return10dMin" placeholder="Min" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none">
+                                <span class="text-gray-400">-</span>
+                                <input type="number" v-model="filter.return10dMax" placeholder="Max" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none">
+                            </div>
+                        </div>
+                        <!-- 近20日漲幅 -->
+                        <div class="flex flex-col">
+                            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1">近 20 日漲幅 (%)</label>
+                            <div class="flex items-center space-x-1">
+                                <input type="number" v-model="filter.return20dMin" placeholder="Min" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none">
+                                <span class="text-gray-400">-</span>
+                                <input type="number" v-model="filter.return20dMax" placeholder="Max" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none">
+                            </div>
                         </div>
                     </div>
                 </div>
                 
                 <div class="mt-4 flex justify-end">
-                    <button @click="resetFilters" class="text-sm px-4 py-1.5 border border-gray-300 text-gray-600 rounded hover:bg-gray-50 transition">
+                    <button @click="resetFilters" class="text-sm px-4 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-700 transition">
                         重設條件
                     </button>
                 </div>
             </div>
 
             <!-- Main Table -->
-            <div class="bg-white rounded shadow-sm border border-gray-200 overflow-hidden">
-                <div class="p-4 bg-gray-50 border-b flex justify-between items-center">
-                    <span class="font-bold text-gray-700 text-sm">符合條件共 {{ filteredStocks.length }} 檔標的</span>
-                    <span class="text-xs text-gray-500">點擊資料列以展開技術線圖</span>
+            <div class="bg-white dark:bg-gray-800 rounded shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div class="p-4 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 flex justify-between items-center">
+                    <span class="font-bold text-gray-700 dark:text-gray-200 text-sm">符合條件共 {{ filteredStocks.length }} 檔標的</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">點擊資料列以展開技術線圖</span>
                 </div>
                 
                 <div class="overflow-x-auto">
+                    <!-- 雙列式精簡排版表格 -->
                     <table class="w-full text-left border-collapse whitespace-nowrap text-sm">
-                        <thead class="bg-gray-800 text-white">
+                        <thead class="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">
                             <tr>
-                                <th class="p-3 font-medium cursor-pointer hover:bg-gray-700" @click="setSort('Industry')">產業類別 <span v-if="sortKey==='Industry'">{{ sortAsc ? '↑' : '↓' }}</span></th>
-                                <th class="p-3 font-medium cursor-pointer hover:bg-gray-700" @click="setSort('Symbol')">股號 <span v-if="sortKey==='Symbol'">{{ sortAsc ? '↑' : '↓' }}</span></th>
-                                <th class="p-3 font-medium">股名</th>
-                                <th class="p-3 font-medium text-right cursor-pointer hover:bg-gray-700" @click="setSort('Latest_Price')">最新價 <span v-if="sortKey==='Latest_Price'">{{ sortAsc ? '↑' : '↓' }}</span></th>
-                                <th class="p-3 font-medium text-right cursor-pointer hover:bg-gray-700" @click="setSort('Max_High')">前波高點 <span v-if="sortKey==='Max_High'">{{ sortAsc ? '↑' : '↓' }}</span></th>
-                                <th class="p-3 font-medium text-right cursor-pointer hover:bg-gray-700" @click="setSort('Days_Since_High')">距前高天數 <span v-if="sortKey==='Days_Since_High'">{{ sortAsc ? '↑' : '↓' }}</span></th>
-                                <th class="p-3 font-medium text-right cursor-pointer hover:bg-gray-700" @click="setSort('Today_Return')">當日漲幅 <span v-if="sortKey==='Today_Return'">{{ sortAsc ? '↑' : '↓' }}</span></th>
-                                <th class="p-3 font-medium text-right cursor-pointer hover:bg-gray-700" @click="setSort('Return_5D')">近 5 日漲幅 <span v-if="sortKey==='Return_5D'">{{ sortAsc ? '↑' : '↓' }}</span></th>
-                                <th class="p-3 font-medium text-right cursor-pointer hover:bg-gray-700" @click="setSort('Breakout_Margin')">已突破幅度 <span v-if="sortKey==='Breakout_Margin'">{{ sortAsc ? '↑' : '↓' }}</span></th>
-                                <th class="p-3 font-medium text-right cursor-pointer hover:bg-gray-700" @click="setSort('Distance_To_High')">距前高幅度 <span v-if="sortKey==='Distance_To_High'">{{ sortAsc ? '↑' : '↓' }}</span></th>
+                                <th class="p-3">
+                                    <div class="flex items-center gap-1">
+                                        <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Industry')">產業</span>/
+                                        <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white font-bold" @click="setSort('Symbol')">標的</span>
+                                        <span class="text-xs text-gray-400" v-if="['Industry','Symbol'].includes(sortKey)">{{ sortAsc ? '↑' : '↓' }}</span>
+                                    </div>
+                                </th>
+                                <th class="p-3 text-right">
+                                    <div class="flex flex-col items-end">
+                                        <div class="cursor-pointer hover:text-gray-900 dark:hover:text-white font-bold" @click="setSort('Latest_Price')">最新價 <span class="text-xs text-gray-400" v-if="sortKey==='Latest_Price'">{{ sortAsc ? '↑' : '↓' }}</span></div>
+                                        <div class="cursor-pointer hover:text-gray-900 dark:hover:text-white text-xs font-normal" @click="setSort('Max_High')">前高 <span class="text-xs text-gray-400" v-if="sortKey==='Max_High'">{{ sortAsc ? '↑' : '↓' }}</span></div>
+                                    </div>
+                                </th>
+                                <th class="p-3 text-right hidden sm:table-cell">
+                                    <div class="flex flex-col items-end gap-1">
+                                        <div class="text-xs font-normal text-gray-500">
+                                            <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Today_Return')">當日 <span v-if="sortKey==='Today_Return'">{{ sortAsc?'↑':'↓' }}</span></span> |
+                                            <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white font-bold text-sm" @click="setSort('Return_5D')">5日 <span v-if="sortKey==='Return_5D'">{{ sortAsc?'↑':'↓' }}</span></span>
+                                        </div>
+                                        <div class="text-xs font-normal text-gray-500">
+                                            <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Return_10D')">10日 <span v-if="sortKey==='Return_10D'">{{ sortAsc?'↑':'↓' }}</span></span> |
+                                            <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Return_20D')">20日 <span v-if="sortKey==='Return_20D'">{{ sortAsc?'↑':'↓' }}</span></span>
+                                        </div>
+                                    </div>
+                                </th>
+                                <th class="p-3 text-right">
+                                    <div class="flex flex-col items-end gap-1">
+                                        <div class="cursor-pointer hover:text-gray-900 dark:hover:text-white font-bold" @click="setSort('Days_Since_High')">距前高天數 <span class="text-xs text-gray-400" v-if="sortKey==='Days_Since_High'">{{ sortAsc ? '↑' : '↓' }}</span></div>
+                                        <div class="text-xs font-normal">
+                                            <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Breakout_Margin')">已突破% <span v-if="sortKey==='Breakout_Margin'">{{ sortAsc?'↑':'↓' }}</span></span> / 
+                                            <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Distance_To_High')">距前高% <span v-if="sortKey==='Distance_To_High'">{{ sortAsc?'↑':'↓' }}</span></span>
+                                        </div>
+                                    </div>
+                                </th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-100">
-                            <template v-for="stock in sortedStocks" :key="stock.Symbol">
-                                <tr @click="toggleRow(stock.Symbol)" class="hover:bg-gray-50 cursor-pointer transition" :class="{'bg-gray-100': expandedRow === stock.Symbol}">
-                                    <td class="p-3 text-gray-500">{{ stock.Industry }}</td>
-                                    <td class="p-3 font-semibold text-gray-800">{{ stock.Symbol }}</td>
-                                    <td class="p-3 font-semibold text-gray-900">{{ stock.Name }}</td>
-                                    <td class="p-3 text-right text-gray-800">{{ stock.Latest_Price }}</td>
-                                    <td class="p-3 text-right text-gray-500">{{ stock.Max_High }}</td>
-                                    <td class="p-3 text-right text-gray-700">{{ stock.Days_Since_High }} 天</td>
-                                    <td class="p-3 text-right font-medium" :class="stock.Today_Return >= 0 ? 'text-red-600' : 'text-green-600'">
-                                        {{ stock.Today_Return > 0 ? '+' : '' }}{{ stock.Today_Return }}%
+                        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                            <template v-for="stock in paginatedStocks" :key="stock.Symbol">
+                                <tr @click="toggleRow(stock.Symbol)" class="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition" :class="{'bg-gray-50 dark:bg-gray-700': expandedRow === stock.Symbol}">
+                                    <td class="p-3">
+                                        <div class="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{{ stock.Industry }}</div>
+                                        <div class="font-bold text-blue-600 dark:text-blue-400">{{ stock.Symbol }} {{ stock.Name }}</div>
                                     </td>
-                                    <td class="p-3 text-right font-medium" :class="stock.Return_5D >= 0 ? 'text-red-600' : 'text-green-600'">
-                                        {{ stock.Return_5D > 0 ? '+' : '' }}{{ stock.Return_5D }}%
+                                    <td class="p-3 text-right">
+                                        <div class="font-bold text-gray-900 dark:text-gray-100 mb-0.5">{{ stock.Latest_Price }}</div>
+                                        <div class="text-xs text-gray-500 dark:text-gray-400">{{ stock.Max_High }}</div>
                                     </td>
-                                    <!-- 已突破幅度：非空值則顯示 -->
-                                    <td class="p-3 text-right font-medium text-red-600">
-                                        {{ stock.Breakout_Margin !== null && stock.Breakout_Margin !== '' ? '+' + stock.Breakout_Margin + '%' : '' }}
+                                    <td class="p-3 text-right hidden sm:table-cell">
+                                        <div class="text-xs mb-1">
+                                            <span class="text-gray-500 dark:text-gray-400">當日: </span><span :class="stock.Today_Return >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'" class="font-medium inline-block w-12">{{ stock.Today_Return > 0 ? '+' : '' }}{{ stock.Today_Return }}%</span> <span class="text-gray-300 dark:text-gray-600">|</span> 
+                                            <span class="text-gray-500 dark:text-gray-400">5日: </span><span :class="stock.Return_5D >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'" class="font-bold inline-block w-12">{{ stock.Return_5D > 0 ? '+' : '' }}{{ stock.Return_5D }}%</span>
+                                        </div>
+                                        <div class="text-xs">
+                                            <span class="text-gray-500 dark:text-gray-400">10日: </span><span :class="stock.Return_10D >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'" class="font-medium inline-block w-12">{{ stock.Return_10D > 0 ? '+' : '' }}{{ stock.Return_10D }}%</span> <span class="text-gray-300 dark:text-gray-600">|</span> 
+                                            <span class="text-gray-500 dark:text-gray-400">20日: </span><span :class="stock.Return_20D >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'" class="font-medium inline-block w-12">{{ stock.Return_20D > 0 ? '+' : '' }}{{ stock.Return_20D }}%</span>
+                                        </div>
                                     </td>
-                                    <!-- 距前高幅度：非空值則顯示 -->
-                                    <td class="p-3 text-right font-medium text-gray-600">
-                                        {{ stock.Distance_To_High !== null && stock.Distance_To_High !== '' ? stock.Distance_To_High + '%' : '' }}
+                                    <td class="p-3 text-right">
+                                        <div class="font-bold text-gray-800 dark:text-gray-200 mb-0.5">{{ stock.Days_Since_High }} 天</div>
+                                        <div class="text-xs">
+                                            <span v-if="stock.Breakout_Margin !== null && stock.Breakout_Margin !== ''" class="font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-1 py-0.5 rounded">突破 +{{ stock.Breakout_Margin }}%</span>
+                                            <span v-else-if="stock.Distance_To_High !== null && stock.Distance_To_High !== ''" class="font-medium text-gray-500 dark:text-gray-400">距離 {{ stock.Distance_To_High }}%</span>
+                                        </div>
                                     </td>
                                 </tr>
                                 
-                                <tr v-if="expandedRow === stock.Symbol" class="bg-gray-50 shadow-inner">
-                                    <td colspan="10" class="p-6 border-b-2 border-gray-300">
+                                <tr v-if="expandedRow === stock.Symbol" class="bg-gray-50 dark:bg-gray-800 shadow-inner">
+                                    <td colspan="4" class="p-4 md:p-6 border-b-2 border-gray-300 dark:border-gray-600">
                                         <div class="flex justify-between items-center mb-4">
-                                            <h4 class="font-bold text-gray-800">代號 {{ stock.Symbol }} {{ stock.Name }} - 近 20 日技術線圖</h4>
-                                            <button @click.stop="toggleRow(stock.Symbol)" class="text-sm text-gray-400 hover:text-gray-700">關閉圖表</button>
+                                            <h4 class="font-bold text-gray-800 dark:text-gray-200">{{ stock.Symbol }} {{ stock.Name }} - 近 20 日技術線圖</h4>
+                                            <button @click.stop="toggleRow(stock.Symbol)" class="text-sm text-gray-500 hover:text-gray-800 dark:hover:text-white font-medium border border-gray-300 dark:border-gray-600 px-3 py-1 rounded bg-white dark:bg-gray-700 shadow-sm">關閉圖表</button>
                                         </div>
-                                        <div :id="'chart-' + stock.Symbol" style="width: 100%; height: 420px;" class="bg-white rounded border border-gray-200 p-2"></div>
+                                        <div :id="'chart-' + stock.Symbol" style="width: 100%; height: 420px;" class="bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700 p-2"></div>
                                     </td>
                                 </tr>
                             </template>
+                            <tr v-if="paginatedStocks.length === 0">
+                                <td colspan="4" class="p-8 text-center text-gray-500 dark:text-gray-400">目前頁面無符合資料</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
+
+                <!-- Pagination -->
+                <div class="bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between">
+                    <span class="text-sm text-gray-600 dark:text-gray-400">
+                        共 {{ filteredStocks.length }} 筆資料 | 頁次 {{ currentPage }} / {{ totalPages || 1 }}
+                    </span>
+                    <div class="flex gap-2">
+                        <button @click="currentPage--" :disabled="currentPage === 1" class="px-3 py-1 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 text-sm shadow-sm transition hover:bg-gray-50 dark:hover:bg-gray-600">上一頁</button>
+                        <button @click="currentPage++" :disabled="currentPage >= totalPages" class="px-3 py-1 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 text-sm shadow-sm transition hover:bg-gray-50 dark:hover:bg-gray-600">下一頁</button>
+                    </div>
+                </div>
+
             </div>
         </div>
 
-        <div v-else-if="!loading" class="text-center py-20 text-gray-500">
+        <div v-else-if="!loading" class="text-center py-20 text-gray-500 dark:text-gray-400">
             請手動載入資料檔案。
         </div>
 
     </div>
 
     <script>
-        const { createApp, ref, computed, nextTick, onMounted } = Vue;
+        const { createApp, ref, computed, nextTick, onMounted, watch } = Vue;
 
         createApp({
             setup() {
@@ -204,10 +285,18 @@
                 const fetchFailed = ref(false);
                 const expandedRow = ref(null);
                 
+                const showReturnFilters = ref(false);
+                const isDarkMode = ref(false);
+                
+                const currentPage = ref(1);
+                const itemsPerPage = 10;
+                
                 const filter = ref({
                     daysMin: null, daysMax: null,
                     todayReturnMin: null, todayReturnMax: null,
                     returnMin: null, returnMax: null,
+                    return10dMin: null, return10dMax: null,
+                    return20dMin: null, return20dMax: null,
                     breakoutMin: null, breakoutMax: null,
                     distanceMin: null, distanceMax: null
                 });
@@ -215,12 +304,22 @@
                 const sortKey = ref('Days_Since_High');
                 const sortAsc = ref(true); 
 
-                // 獨立拉出抓取資料的 function，加上時間戳記反快取
+                const toggleDarkMode = () => {
+                    isDarkMode.value = !isDarkMode.value;
+                    if (isDarkMode.value) {
+                        document.documentElement.classList.add('dark');
+                    } else {
+                        document.documentElement.classList.remove('dark');
+                    }
+                    if (expandedRow.value) {
+                        renderChart(expandedRow.value);
+                    }
+                };
+
                 const fetchData = () => {
                     loading.value = true;
                     fetchFailed.value = false;
                     
-                    // 加上 ?t=時間戳記，確保瀏覽器每次都抓最新的，不會用快取
                     const url = `breakout_stocks.csv?t=${new Date().getTime()}`;
                     
                     fetch(url)
@@ -238,8 +337,12 @@
                         });
                 };
 
-                // 網頁載入時自動執行一次
                 onMounted(() => {
+                    // Check system preference for dark mode initially
+                    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                        isDarkMode.value = true;
+                        document.documentElement.classList.add('dark');
+                    }
                     fetchData();
                 });
 
@@ -272,6 +375,8 @@
                                         Days_Since_High: parseInt(row.Days_Since_High || 0),
                                         Today_Return: parseFloat(row.Today_Return || 0),
                                         Return_5D: parseFloat(row.Return_5D || 0),
+                                        Return_10D: parseFloat(row.Return_10D || 0),
+                                        Return_20D: parseFloat(row.Return_20D || 0),
                                         Breakout_Margin: breakout,
                                         Distance_To_High: distance,
                                         MA5: parseFloat(row.MA5 || 0),
@@ -280,6 +385,7 @@
                                     };
                                 });
                             }
+                            currentPage.value = 1;
                             loading.value = false;
                         }
                     });
@@ -290,9 +396,12 @@
                         daysMin: null, daysMax: null,
                         todayReturnMin: null, todayReturnMax: null,
                         returnMin: null, returnMax: null,
+                        return10dMin: null, return10dMax: null,
+                        return20dMin: null, return20dMax: null,
                         breakoutMin: null, breakoutMax: null,
                         distanceMin: null, distanceMax: null
                     };
+                    currentPage.value = 1;
                 };
 
                 const applyQuickFilter = (type) => {
@@ -309,6 +418,10 @@
                         filter.value.daysMax = 3;
                         filter.value.returnMin = 10;
                         filter.value.breakoutMin = 0; 
+                    } else if (type === 'consolidation') {
+                        filter.value.daysMax = 5;
+                        filter.value.breakoutMin = 0; 
+                        filter.value.return20dMin = 10; 
                     }
                 };
 
@@ -324,6 +437,12 @@
                         
                         if (f.returnMin !== null && f.returnMin !== '' && stock.Return_5D < parseFloat(f.returnMin)) return false;
                         if (f.returnMax !== null && f.returnMax !== '' && stock.Return_5D > parseFloat(f.returnMax)) return false;
+
+                        if (f.return10dMin !== null && f.return10dMin !== '' && stock.Return_10D < parseFloat(f.return10dMin)) return false;
+                        if (f.return10dMax !== null && f.return10dMax !== '' && stock.Return_10D > parseFloat(f.return10dMax)) return false;
+
+                        if (f.return20dMin !== null && f.return20dMin !== '' && stock.Return_20D < parseFloat(f.return20dMin)) return false;
+                        if (f.return20dMax !== null && f.return20dMax !== '' && stock.Return_20D > parseFloat(f.return20dMax)) return false;
                         
                         const isBreakoutSet = (f.breakoutMin !== null && f.breakoutMin !== '') || (f.breakoutMax !== null && f.breakoutMax !== '');
                         if (isBreakoutSet) {
@@ -343,6 +462,10 @@
                     });
                 });
 
+                watch(filteredStocks, () => {
+                    currentPage.value = 1;
+                });
+
                 const sortedStocks = computed(() => {
                     return [...filteredStocks.value].sort((a, b) => {
                         let valA = a[sortKey.value];
@@ -355,6 +478,14 @@
                         let comp = valA > valB ? 1 : -1;
                         return sortAsc.value ? comp : -comp;
                     });
+                });
+
+                const totalPages = computed(() => Math.ceil(sortedStocks.value.length / itemsPerPage));
+                
+                const paginatedStocks = computed(() => {
+                    const start = (currentPage.value - 1) * itemsPerPage;
+                    const end = start + itemsPerPage;
+                    return sortedStocks.value.slice(start, end);
                 });
 
                 const setSort = (key) => {
@@ -382,7 +513,9 @@
                     
                     let myChart = echarts.getInstanceByDom(chartDom);
                     if (myChart) myChart.dispose();
-                    myChart = echarts.init(chartDom);
+                    
+                    // Apply dark theme appropriately
+                    myChart = echarts.init(chartDom, isDarkMode.value ? 'dark' : null);
                     
                     const categoryData = klines.map(k => k.date);
                     const values = klines.map(k => [k.open, k.close, k.low, k.high]);
@@ -426,6 +559,7 @@
                     }
 
                     const option = {
+                        backgroundColor: 'transparent',
                         tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
                         axisPointer: { link: { xAxisIndex: 'all' } },
                         grid: [
@@ -465,8 +599,9 @@
                 return {
                     stocks, updateDate, loading, fetchFailed, expandedRow,
                     filter, filteredStocks, applyQuickFilter, fetchData,
-                    sortKey, sortAsc, sortedStocks, setSort, resetFilters,
-                    handleManualUpload, toggleRow
+                    sortKey, sortAsc, sortedStocks, paginatedStocks, setSort, resetFilters,
+                    handleManualUpload, toggleRow, showReturnFilters, isDarkMode, toggleDarkMode,
+                    currentPage, totalPages
                 };
             }
         }).mount('#app');

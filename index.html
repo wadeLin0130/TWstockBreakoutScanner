@@ -3,18 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>台股強勢突破追蹤系統</title>
+    <title>台股強勢突破即時監控</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {}
-            }
-        }
+        tailwind.config = { darkMode: 'class' }
     </script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 </head>
 <body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans min-h-screen transition-colors duration-200">
@@ -23,35 +17,28 @@
         <!-- Header -->
         <header class="mb-6 flex flex-col md:flex-row justify-between items-end gap-4 border-b border-gray-300 dark:border-gray-700 pb-4">
             <div>
-                <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-wide">台股強勢突破追蹤系統</h1>
-                <p class="text-gray-500 dark:text-gray-400 mt-1 text-sm">篩選條件：最新收盤價距離近期最高價 &lt; 10% 以內之標的</p>
+                <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-wide flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></span>
+                    台股強勢突破即時監控
+                </h1>
+                <p class="text-gray-500 dark:text-gray-400 mt-1 text-sm">盤中半即時串流</p>
             </div>
             <div class="text-right">
                 <div class="flex items-center justify-end gap-3 mb-2">
                     <button @click="toggleDarkMode" class="text-sm font-medium bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 px-3 py-1 rounded transition flex items-center shadow-sm">
                         {{ isDarkMode ? '切換明亮模式' : '切換深色模式' }}
                     </button>
-                    <button @click="fetchData" class="text-sm font-medium bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 px-3 py-1 rounded transition flex items-center shadow-sm">
-                        重新整理資料
-                    </button>
-                    <div v-if="updateDate" class="text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-3 py-1 rounded inline-block">
-                        資料日期: {{ updateDate }}
+                    <div class="text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-3 py-1 rounded inline-flex items-center gap-2">
+                        <span>最後更新: {{ lastUpdate }}</span>
                     </div>
-                </div>
-                
-                <div v-if="fetchFailed" class="mt-2">
-                    <label class="cursor-pointer bg-gray-700 hover:bg-gray-800 dark:bg-gray-600 dark:hover:bg-gray-500 text-white text-sm px-4 py-2 rounded transition inline-block">
-                        手動載入資料 (CSV)
-                        <input type="file" accept=".csv" @change="handleManualUpload" class="hidden" />
-                    </label>
                 </div>
             </div>
         </header>
 
         <!-- Loading State -->
         <div v-if="loading" class="text-center py-20">
-            <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-gray-600 dark:border-gray-400 mx-auto"></div>
-            <p class="mt-4 text-gray-500 dark:text-gray-400 text-sm">系統讀取中...</p>
+            <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500 mx-auto"></div>
+            <p class="mt-4 text-gray-500 dark:text-gray-400 text-sm">正在與 Firebase 建立即時連線...</p>
         </div>
 
         <!-- Main Workspace -->
@@ -62,58 +49,38 @@
                 <div class="flex flex-col lg:flex-row justify-between lg:items-center mb-4 border-b border-gray-100 dark:border-gray-700 pb-3 gap-3">
                     <div class="text-sm font-bold text-gray-700 dark:text-gray-300">進階條件篩選</div>
                     <div class="flex flex-wrap gap-2">
-                        <button @click="applyQuickFilter('pending')" class="text-xs px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition font-medium">
-                            強勢即將突破
-                        </button>
-                        <button @click="applyQuickFilter('just_breakout')" class="text-xs px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition font-medium">
-                            強勢剛突破
-                        </button>
-                        <button @click="applyQuickFilter('continuous')" class="text-xs px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition font-medium">
-                            持續突破
-                        </button>
+                        <button @click="applyQuickFilter('pending')" class="text-xs px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition font-medium">強勢即將突破</button>
+                        <button @click="applyQuickFilter('just_breakout')" class="text-xs px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition font-medium">強勢剛突破</button>
+                        <button @click="applyQuickFilter('continuous')" class="text-xs px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition font-medium">持續突破</button>
+                        <button @click="applyQuickFilter('consolidation')" class="text-xs px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition font-medium">高檔整理突破</button>
                     </div>
                 </div>
                 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <!-- 距前高天數 -->
-                    <div class="flex flex-col">
-                        <label class="text-xs text-gray-500 dark:text-gray-400 mb-1">距前高天數 (天)</label>
-                        <div class="flex items-center space-x-1">
-                            <input type="number" v-model="filter.daysMin" placeholder="Min" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:border-gray-500">
-                            <span class="text-gray-400">-</span>
-                            <input type="number" v-model="filter.daysMax" placeholder="Max" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:border-gray-500">
-                        </div>
-                    </div>
-
-                    <!-- 已突破幅度 -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="flex flex-col">
                         <label class="text-xs text-gray-500 dark:text-gray-400 mb-1">已突破幅度 (%)</label>
                         <div class="flex items-center space-x-1">
-                            <input type="number" v-model="filter.breakoutMin" placeholder="Min" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:border-gray-500">
+                            <input type="number" v-model="filter.breakoutMin" placeholder="Min" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none">
                             <span class="text-gray-400">-</span>
-                            <input type="number" v-model="filter.breakoutMax" placeholder="Max" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:border-gray-500">
+                            <input type="number" v-model="filter.breakoutMax" placeholder="Max" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none">
                         </div>
                     </div>
-
-                    <!-- 距前高幅度 -->
                     <div class="flex flex-col">
                         <label class="text-xs text-gray-500 dark:text-gray-400 mb-1">距前高幅度 (%)</label>
                         <div class="flex items-center space-x-1">
-                            <input type="number" v-model="filter.distanceMin" placeholder="Min" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:border-gray-500">
+                            <input type="number" v-model="filter.distanceMin" placeholder="Min" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none">
                             <span class="text-gray-400">-</span>
-                            <input type="number" v-model="filter.distanceMax" placeholder="Max" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:border-gray-500">
+                            <input type="number" v-model="filter.distanceMax" placeholder="Max" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none">
                         </div>
                     </div>
                 </div>
 
-                <!-- 展開式漲幅篩選 -->
                 <div class="mt-4 border-t border-gray-100 dark:border-gray-700 pt-3">
                     <button @click="showReturnFilters = !showReturnFilters" class="text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition">
                         {{ showReturnFilters ? '收合各期間漲幅篩選 ▲' : '展開各期間漲幅篩選 ▼' }}
                     </button>
                     
                     <div v-show="showReturnFilters" class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4 bg-gray-50 dark:bg-gray-700/30 p-3 rounded border border-gray-100 dark:border-gray-700">
-                        <!-- 當日漲幅 -->
                         <div class="flex flex-col">
                             <label class="text-xs text-gray-500 dark:text-gray-400 mb-1">當日漲幅 (%)</label>
                             <div class="flex items-center space-x-1">
@@ -122,7 +89,6 @@
                                 <input type="number" v-model="filter.todayReturnMax" placeholder="Max" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none">
                             </div>
                         </div>
-                        <!-- 近5日漲幅 -->
                         <div class="flex flex-col">
                             <label class="text-xs text-gray-500 dark:text-gray-400 mb-1">近 5 日漲幅 (%)</label>
                             <div class="flex items-center space-x-1">
@@ -131,7 +97,6 @@
                                 <input type="number" v-model="filter.returnMax" placeholder="Max" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none">
                             </div>
                         </div>
-                        <!-- 近10日漲幅 -->
                         <div class="flex flex-col">
                             <label class="text-xs text-gray-500 dark:text-gray-400 mb-1">近 10 日漲幅 (%)</label>
                             <div class="flex items-center space-x-1">
@@ -140,7 +105,6 @@
                                 <input type="number" v-model="filter.return10dMax" placeholder="Max" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none">
                             </div>
                         </div>
-                        <!-- 近20日漲幅 -->
                         <div class="flex flex-col">
                             <label class="text-xs text-gray-500 dark:text-gray-400 mb-1">近 20 日漲幅 (%)</label>
                             <div class="flex items-center space-x-1">
@@ -163,11 +127,9 @@
             <div class="bg-white dark:bg-gray-800 rounded shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <div class="p-4 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 flex justify-between items-center">
                     <span class="font-bold text-gray-700 dark:text-gray-200 text-sm">符合條件共 {{ filteredStocks.length }} 檔標的</span>
-                    <span class="text-xs text-gray-500 dark:text-gray-400">點擊資料列以展開技術線圖</span>
                 </div>
                 
                 <div class="overflow-x-auto">
-                    <!-- 雙列式精簡排版表格 -->
                     <table class="w-full text-left border-collapse whitespace-nowrap text-sm">
                         <thead class="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">
                             <tr>
@@ -175,33 +137,31 @@
                                     <div class="flex items-center gap-1">
                                         <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Industry')">產業</span>/
                                         <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white font-bold" @click="setSort('Symbol')">標的</span>
-                                        <span class="text-xs text-gray-400" v-if="['Industry','Symbol'].includes(sortKey)">{{ sortAsc ? '↑' : '↓' }}</span>
                                     </div>
                                 </th>
                                 <th class="p-3 text-right">
                                     <div class="flex flex-col items-end">
-                                        <div class="cursor-pointer hover:text-gray-900 dark:hover:text-white font-bold" @click="setSort('Latest_Price')">最新價 <span class="text-xs text-gray-400" v-if="sortKey==='Latest_Price'">{{ sortAsc ? '↑' : '↓' }}</span></div>
-                                        <div class="cursor-pointer hover:text-gray-900 dark:hover:text-white text-xs font-normal" @click="setSort('Max_High')">前高 <span class="text-xs text-gray-400" v-if="sortKey==='Max_High'">{{ sortAsc ? '↑' : '↓' }}</span></div>
+                                        <div class="cursor-pointer hover:text-gray-900 dark:hover:text-white font-bold" @click="setSort('Latest_Price')">即時現價 <span class="w-2 h-2 inline-block rounded-full bg-red-500 animate-pulse"></span></div>
+                                        <div class="cursor-pointer hover:text-gray-900 dark:hover:text-white text-xs font-normal" @click="setSort('Max_High')">52週前高</div>
                                     </div>
                                 </th>
                                 <th class="p-3 text-right hidden sm:table-cell">
                                     <div class="flex flex-col items-end gap-1">
                                         <div class="text-xs font-normal text-gray-500">
-                                            <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Today_Return')">當日 <span v-if="sortKey==='Today_Return'">{{ sortAsc?'↑':'↓' }}</span></span> |
-                                            <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white font-bold text-sm" @click="setSort('Return_5D')">5日 <span v-if="sortKey==='Return_5D'">{{ sortAsc?'↑':'↓' }}</span></span>
+                                            <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Today_Return')">當日</span> |
+                                            <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white font-bold" @click="setSort('Return_5D')">5日</span>
                                         </div>
                                         <div class="text-xs font-normal text-gray-500">
-                                            <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Return_10D')">10日 <span v-if="sortKey==='Return_10D'">{{ sortAsc?'↑':'↓' }}</span></span> |
-                                            <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Return_20D')">20日 <span v-if="sortKey==='Return_20D'">{{ sortAsc?'↑':'↓' }}</span></span>
+                                            <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Return_10D')">10日</span> |
+                                            <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Return_20D')">20日</span>
                                         </div>
                                     </div>
                                 </th>
                                 <th class="p-3 text-right">
                                     <div class="flex flex-col items-end gap-1">
-                                        <div class="cursor-pointer hover:text-gray-900 dark:hover:text-white font-bold" @click="setSort('Days_Since_High')">距前高天數 <span class="text-xs text-gray-400" v-if="sortKey==='Days_Since_High'">{{ sortAsc ? '↑' : '↓' }}</span></div>
                                         <div class="text-xs font-normal">
-                                            <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Breakout_Margin')">已突破% <span v-if="sortKey==='Breakout_Margin'">{{ sortAsc?'↑':'↓' }}</span></span> / 
-                                            <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Distance_To_High')">距前高% <span v-if="sortKey==='Distance_To_High'">{{ sortAsc?'↑':'↓' }}</span></span>
+                                            <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Breakout_Margin')">已突破%</span> / 
+                                            <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Distance_To_High')">距前高%</span>
                                         </div>
                                     </div>
                                 </th>
@@ -209,13 +169,14 @@
                         </thead>
                         <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
                             <template v-for="stock in paginatedStocks" :key="stock.Symbol">
-                                <tr @click="toggleRow(stock.Symbol)" class="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition" :class="{'bg-gray-50 dark:bg-gray-700': expandedRow === stock.Symbol}">
+                                <!-- 列點擊展開圖表 -->
+                                <tr @click="toggleRow(stock.Symbol)" class="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition">
                                     <td class="p-3">
                                         <div class="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{{ stock.Industry }}</div>
                                         <div class="font-bold text-blue-600 dark:text-blue-400">{{ stock.Symbol }} {{ stock.Name }}</div>
                                     </td>
                                     <td class="p-3 text-right">
-                                        <div class="font-bold text-gray-900 dark:text-gray-100 mb-0.5">{{ stock.Latest_Price }}</div>
+                                        <div class="font-bold text-gray-900 dark:text-gray-100 text-lg mb-0.5">{{ stock.Latest_Price }}</div>
                                         <div class="text-xs text-gray-500 dark:text-gray-400">{{ stock.Max_High }}</div>
                                     </td>
                                     <td class="p-3 text-right hidden sm:table-cell">
@@ -229,70 +190,89 @@
                                         </div>
                                     </td>
                                     <td class="p-3 text-right">
-                                        <div class="font-bold text-gray-800 dark:text-gray-200 mb-0.5">{{ stock.Days_Since_High }} 天</div>
-                                        <div class="text-xs">
+                                        <div class="text-xs mt-2">
                                             <span v-if="stock.Breakout_Margin !== null && stock.Breakout_Margin !== ''" class="font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-1 py-0.5 rounded">突破 +{{ stock.Breakout_Margin }}%</span>
                                             <span v-else-if="stock.Distance_To_High !== null && stock.Distance_To_High !== ''" class="font-medium text-gray-500 dark:text-gray-400">距離 {{ stock.Distance_To_High }}%</span>
                                         </div>
                                     </td>
                                 </tr>
                                 
+                                <!-- 展開區塊 (包含 AI 介紹、狀態與圖表) -->
                                 <tr v-if="expandedRow === stock.Symbol" class="bg-gray-50 dark:bg-gray-800 shadow-inner">
                                     <td colspan="4" class="p-4 md:p-6 border-b-2 border-gray-300 dark:border-gray-600">
+                                        
+                                        <!-- AI 介紹與狀態列 -->
+                                        <div class="mb-4 flex flex-col md:flex-row gap-4">
+                                            <div class="flex-1 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-3 rounded">
+                                                <div class="text-xs font-bold text-blue-800 dark:text-blue-300 mb-1">企業簡介</div>
+                                                <div class="text-sm text-blue-900 dark:text-blue-100">{{ stock.Company_Info || '分析生成中...' }}</div>
+                                            </div>
+                                            <div class="md:w-1/3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 p-3 rounded">
+                                                <div class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">籌碼與評級</div>
+                                                <div class="text-sm text-gray-800 dark:text-gray-200 mb-1">{{ stock.Status_Tags }}</div>
+                                                <div v-if="stock.Rating" class="text-xs font-bold text-purple-600 dark:text-purple-400">{{ stock.Rating }}</div>
+                                            </div>
+                                        </div>
+
                                         <div class="flex justify-between items-center mb-4">
-                                            <h4 class="font-bold text-gray-800 dark:text-gray-200">{{ stock.Symbol }} {{ stock.Name }} - 近 20 日技術線圖</h4>
-                                            <button @click.stop="toggleRow(stock.Symbol)" class="text-sm text-gray-500 hover:text-gray-800 dark:hover:text-white font-medium border border-gray-300 dark:border-gray-600 px-3 py-1 rounded bg-white dark:bg-gray-700 shadow-sm">關閉圖表</button>
+                                            <h4 class="font-bold text-gray-800 dark:text-gray-200">近 60 日技術線圖 (可左右滑動/縮放)</h4>
+                                            <button @click.stop="toggleRow(stock.Symbol)" class="text-sm text-gray-500 hover:text-gray-800 dark:hover:text-white font-medium border border-gray-300 dark:border-gray-600 px-3 py-1 rounded bg-white dark:bg-gray-700 shadow-sm">關閉區塊</button>
                                         </div>
                                         <div :id="'chart-' + stock.Symbol" style="width: 100%; height: 420px;" class="bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700 p-2"></div>
                                     </td>
                                 </tr>
                             </template>
-                            <tr v-if="paginatedStocks.length === 0">
-                                <td colspan="4" class="p-8 text-center text-gray-500 dark:text-gray-400">目前頁面無符合資料</td>
-                            </tr>
                         </tbody>
                     </table>
                 </div>
 
-                <!-- Pagination -->
                 <div class="bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between">
                     <span class="text-sm text-gray-600 dark:text-gray-400">
                         共 {{ filteredStocks.length }} 筆資料 | 頁次 {{ currentPage }} / {{ totalPages || 1 }}
                     </span>
                     <div class="flex gap-2">
-                        <button @click="currentPage--" :disabled="currentPage === 1" class="px-3 py-1 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 text-sm shadow-sm transition hover:bg-gray-50 dark:hover:bg-gray-600">上一頁</button>
-                        <button @click="currentPage++" :disabled="currentPage >= totalPages" class="px-3 py-1 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 text-sm shadow-sm transition hover:bg-gray-50 dark:hover:bg-gray-600">下一頁</button>
+                        <button @click="currentPage--" :disabled="currentPage === 1" class="px-3 py-1 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 text-sm">上一頁</button>
+                        <button @click="currentPage++" :disabled="currentPage >= totalPages" class="px-3 py-1 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 text-sm">下一頁</button>
                     </div>
                 </div>
 
             </div>
         </div>
-
-        <div v-else-if="!loading" class="text-center py-20 text-gray-500 dark:text-gray-400">
-            請手動載入資料檔案。
-        </div>
-
     </div>
 
-    <script>
+    <!-- 載入 Firebase 模組 -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getFirestore, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+        
         const { createApp, ref, computed, nextTick, onMounted, watch } = Vue;
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyApgtjxY6TTOzQQN4spjPSTfyEX5LFa6ow",
+            authDomain: "twsebs-ba9bb.firebaseapp.com",
+            projectId: "twsebs-ba9bb",
+            storageBucket: "twsebs-ba9bb.firebasestorage.app",
+            messagingSenderId: "314951416631",
+            appId: "1:314951416631:web:7dfceb19832bcabed978b2",
+            measurementId: "G-G2N040LC45"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
 
         createApp({
             setup() {
                 const stocks = ref([]);
-                const updateDate = ref('');
+                const lastUpdate = ref('-');
                 const loading = ref(true);
-                const fetchFailed = ref(false);
                 const expandedRow = ref(null);
                 
                 const showReturnFilters = ref(false);
                 const isDarkMode = ref(false);
-                
                 const currentPage = ref(1);
                 const itemsPerPage = 10;
                 
                 const filter = ref({
-                    daysMin: null, daysMax: null,
                     todayReturnMin: null, todayReturnMax: null,
                     returnMin: null, returnMax: null,
                     return10dMin: null, return10dMax: null,
@@ -301,179 +281,90 @@
                     distanceMin: null, distanceMax: null
                 });
 
-                const sortKey = ref('Days_Since_High');
+                const sortKey = ref('Distance_To_High');
                 const sortAsc = ref(true); 
 
                 const toggleDarkMode = () => {
                     isDarkMode.value = !isDarkMode.value;
-                    if (isDarkMode.value) {
-                        document.documentElement.classList.add('dark');
-                    } else {
-                        document.documentElement.classList.remove('dark');
-                    }
-                    if (expandedRow.value) {
-                        renderChart(expandedRow.value);
-                    }
-                };
-
-                const fetchData = () => {
-                    loading.value = true;
-                    fetchFailed.value = false;
-                    
-                    const url = `breakout_stocks.csv?t=${new Date().getTime()}`;
-                    
-                    fetch(url)
-                        .then(response => {
-                            if (!response.ok) throw new Error('File not found');
-                            return response.text();
-                        })
-                        .then(csvText => {
-                            parseCSV(csvText);
-                        })
-                        .catch(err => {
-                            console.warn("自動抓取失敗，等待手動上傳。");
-                            loading.value = false;
-                            fetchFailed.value = true;
-                        });
+                    if (isDarkMode.value) document.documentElement.classList.add('dark');
+                    else document.documentElement.classList.remove('dark');
+                    if (expandedRow.value) renderChart(expandedRow.value);
                 };
 
                 onMounted(() => {
-                    // Check system preference for dark mode initially
                     if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
                         isDarkMode.value = true;
                         document.documentElement.classList.add('dark');
                     }
-                    fetchData();
+
+                    onSnapshot(collection(db, "LiveStocks"), (snapshot) => {
+                        const newStocks = [];
+                        snapshot.forEach((doc) => {
+                            newStocks.push(doc.data());
+                        });
+                        
+                        stocks.value = newStocks;
+                        const now = new Date();
+                        lastUpdate.value = now.getHours().toString().padStart(2, '0') + ':' + 
+                                           now.getMinutes().toString().padStart(2, '0') + ':' + 
+                                           now.getSeconds().toString().padStart(2, '0');
+                        loading.value = false;
+                    }, (error) => {
+                        console.error("Firebase 連線錯誤:", error);
+                        alert("資料庫連線失敗，請檢查 Config 是否正確。");
+                    });
                 });
 
-                const handleManualUpload = (event) => {
-                    const file = event.target.files[0];
-                    if (!file) return;
-                    loading.value = true;
-                    fetchFailed.value = false;
-                    
-                    const reader = new FileReader();
-                    reader.onload = (e) => parseCSV(e.target.result);
-                    reader.readAsText(file);
-                };
-
-                const parseCSV = (csvText) => {
-                    Papa.parse(csvText, {
-                        header: true,
-                        skipEmptyLines: true,
-                        complete: (results) => {
-                            if (results.data.length > 0 && results.data[0].Symbol) {
-                                updateDate.value = results.data[0].Update_Date || '-';
-                                stocks.value = results.data.map(row => {
-                                    const breakout = row.Breakout_Margin && row.Breakout_Margin !== '' ? parseFloat(row.Breakout_Margin) : null;
-                                    const distance = row.Distance_To_High && row.Distance_To_High !== '' ? parseFloat(row.Distance_To_High) : null;
-                                    
-                                    return {
-                                        ...row,
-                                        Latest_Price: parseFloat(row.Latest_Price),
-                                        Max_High: parseFloat(row.Max_High),
-                                        Days_Since_High: parseInt(row.Days_Since_High || 0),
-                                        Today_Return: parseFloat(row.Today_Return || 0),
-                                        Return_5D: parseFloat(row.Return_5D || 0),
-                                        Return_10D: parseFloat(row.Return_10D || 0),
-                                        Return_20D: parseFloat(row.Return_20D || 0),
-                                        Breakout_Margin: breakout,
-                                        Distance_To_High: distance,
-                                        MA5: parseFloat(row.MA5 || 0),
-                                        MA10: parseFloat(row.MA10 || 0),
-                                        MA20: parseFloat(row.MA20 || 0)
-                                    };
-                                });
-                            }
-                            currentPage.value = 1;
-                            loading.value = false;
-                        }
-                    });
-                };
-
                 const resetFilters = () => {
-                    filter.value = {
-                        daysMin: null, daysMax: null,
-                        todayReturnMin: null, todayReturnMax: null,
-                        returnMin: null, returnMax: null,
-                        return10dMin: null, return10dMax: null,
-                        return20dMin: null, return20dMax: null,
-                        breakoutMin: null, breakoutMax: null,
-                        distanceMin: null, distanceMax: null
-                    };
+                    filter.value = { todayReturnMin: null, todayReturnMax: null, returnMin: null, returnMax: null, return10dMin: null, return10dMax: null, return20dMin: null, return20dMax: null, breakoutMin: null, breakoutMax: null, distanceMin: null, distanceMax: null };
                     currentPage.value = 1;
                 };
 
                 const applyQuickFilter = (type) => {
                     resetFilters();
-                    if (type === 'pending') {
-                        filter.value.daysMin = 10;
-                        filter.value.returnMin = 10;
-                        filter.value.distanceMax = 5; 
-                    } else if (type === 'just_breakout') {
-                        filter.value.daysMin = 10;
-                        filter.value.returnMin = 10;
-                        filter.value.breakoutMin = 2; 
-                    } else if (type === 'continuous') {
-                        filter.value.daysMax = 3;
-                        filter.value.returnMin = 10;
-                        filter.value.breakoutMin = 0; 
-                    } else if (type === 'consolidation') {
-                        filter.value.daysMax = 5;
-                        filter.value.breakoutMin = 0; 
-                        filter.value.return20dMin = 10; 
-                    }
+                    if (type === 'pending') { filter.value.returnMin = 10; filter.value.distanceMax = 5; } 
+                    else if (type === 'just_breakout') { filter.value.returnMin = 10; filter.value.breakoutMin = 2; } 
+                    else if (type === 'continuous') { filter.value.returnMin = 10; filter.value.breakoutMin = 0; } 
+                    else if (type === 'consolidation') { filter.value.breakoutMin = 0; filter.value.return20dMin = 10; }
                 };
 
                 const filteredStocks = computed(() => {
                     return stocks.value.filter(stock => {
                         const f = filter.value;
-                        
-                        if (f.daysMin !== null && f.daysMin !== '' && stock.Days_Since_High < parseFloat(f.daysMin)) return false;
-                        if (f.daysMax !== null && f.daysMax !== '' && stock.Days_Since_High > parseFloat(f.daysMax)) return false;
-                        
                         if (f.todayReturnMin !== null && f.todayReturnMin !== '' && stock.Today_Return < parseFloat(f.todayReturnMin)) return false;
                         if (f.todayReturnMax !== null && f.todayReturnMax !== '' && stock.Today_Return > parseFloat(f.todayReturnMax)) return false;
-                        
                         if (f.returnMin !== null && f.returnMin !== '' && stock.Return_5D < parseFloat(f.returnMin)) return false;
                         if (f.returnMax !== null && f.returnMax !== '' && stock.Return_5D > parseFloat(f.returnMax)) return false;
-
                         if (f.return10dMin !== null && f.return10dMin !== '' && stock.Return_10D < parseFloat(f.return10dMin)) return false;
                         if (f.return10dMax !== null && f.return10dMax !== '' && stock.Return_10D > parseFloat(f.return10dMax)) return false;
-
                         if (f.return20dMin !== null && f.return20dMin !== '' && stock.Return_20D < parseFloat(f.return20dMin)) return false;
                         if (f.return20dMax !== null && f.return20dMax !== '' && stock.Return_20D > parseFloat(f.return20dMax)) return false;
                         
                         const isBreakoutSet = (f.breakoutMin !== null && f.breakoutMin !== '') || (f.breakoutMax !== null && f.breakoutMax !== '');
                         if (isBreakoutSet) {
-                            if (stock.Breakout_Margin === null) return false;
+                            if (stock.Breakout_Margin === null || stock.Breakout_Margin === '') return false;
                             if (f.breakoutMin !== null && f.breakoutMin !== '' && stock.Breakout_Margin < parseFloat(f.breakoutMin)) return false;
                             if (f.breakoutMax !== null && f.breakoutMax !== '' && stock.Breakout_Margin > parseFloat(f.breakoutMax)) return false;
                         }
 
                         const isDistanceSet = (f.distanceMin !== null && f.distanceMin !== '') || (f.distanceMax !== null && f.distanceMax !== '');
                         if (isDistanceSet) {
-                            if (stock.Distance_To_High === null) return false;
+                            if (stock.Distance_To_High === null || stock.Distance_To_High === '') return false;
                             if (f.distanceMin !== null && f.distanceMin !== '' && stock.Distance_To_High < parseFloat(f.distanceMin)) return false;
                             if (f.distanceMax !== null && f.distanceMax !== '' && stock.Distance_To_High > parseFloat(f.distanceMax)) return false;
                         }
-
                         return true;
                     });
                 });
 
-                watch(filteredStocks, () => {
-                    currentPage.value = 1;
-                });
+                watch(filteredStocks, () => { currentPage.value = 1; });
 
                 const sortedStocks = computed(() => {
                     return [...filteredStocks.value].sort((a, b) => {
                         let valA = a[sortKey.value];
                         let valB = b[sortKey.value];
-                        
                         if (valA === null || valA === '') valA = sortAsc.value ? Infinity : -Infinity;
                         if (valB === null || valB === '') valB = sortAsc.value ? Infinity : -Infinity;
-                        
                         if (valA === valB) return 0;
                         let comp = valA > valB ? 1 : -1;
                         return sortAsc.value ? comp : -comp;
@@ -481,11 +372,9 @@
                 });
 
                 const totalPages = computed(() => Math.ceil(sortedStocks.value.length / itemsPerPage));
-                
                 const paginatedStocks = computed(() => {
                     const start = (currentPage.value - 1) * itemsPerPage;
-                    const end = start + itemsPerPage;
-                    return sortedStocks.value.slice(start, end);
+                    return sortedStocks.value.slice(start, start + itemsPerPage);
                 });
 
                 const setSort = (key) => {
@@ -494,14 +383,8 @@
                 };
 
                 const toggleRow = (symbol) => {
-                    if (expandedRow.value === symbol) {
-                        expandedRow.value = null;
-                    } else {
-                        expandedRow.value = symbol;
-                        nextTick(() => {
-                            renderChart(symbol);
-                        });
-                    }
+                    if (expandedRow.value === symbol) { expandedRow.value = null; } 
+                    else { expandedRow.value = symbol; nextTick(() => { renderChart(symbol); }); }
                 };
 
                 const renderChart = (symbol) => {
@@ -510,97 +393,71 @@
                     
                     const klines = JSON.parse(stock.Klines);
                     const chartDom = document.getElementById('chart-' + symbol);
-                    
                     let myChart = echarts.getInstanceByDom(chartDom);
                     if (myChart) myChart.dispose();
-                    
-                    // Apply dark theme appropriately
                     myChart = echarts.init(chartDom, isDarkMode.value ? 'dark' : null);
                     
                     const categoryData = klines.map(k => k.date);
                     const values = klines.map(k => [k.open, k.close, k.low, k.high]);
-                    
                     const volumes = klines.map(k => {
                         const isUp = k.close >= k.open;
-                        return {
-                            value: k.volume,
-                            itemStyle: { color: isUp ? '#dc2626' : '#16a34a' }
-                        };
+                        return { value: k.volume, itemStyle: { color: isUp ? '#dc2626' : '#16a34a' } };
                     });
 
                     const markLineData = [];
                     const len = categoryData.length;
 
-                    if (stock.Max_High) {
-                        markLineData.push({
-                            yAxis: stock.Max_High,
-                            lineStyle: { color: '#dc2626', width: 2, type: 'dashed', opacity: 0.8 },
-                            label: { formatter: '前高 {c}', position: 'insideEndTop', color: '#dc2626', fontWeight: 'bold' }
-                        });
-                    }
-
-                    if (stock.MA5) {
-                        markLineData.push([
-                            { coord: [categoryData[Math.max(0, len - 5)], stock.MA5], symbol: 'none', lineStyle: { color: '#3b82f6', width: 2, type: 'dashed', opacity: 0.6 } },
-                            { coord: [categoryData[len - 1], stock.MA5], symbol: 'none', label: { formatter: '5MA', position: 'end', color: '#3b82f6', fontWeight: 'bold' } }
-                        ]);
-                    }
-                    if (stock.MA10) {
-                        markLineData.push([
-                            { coord: [categoryData[Math.max(0, len - 10)], stock.MA10], symbol: 'none', lineStyle: { color: '#d97706', width: 2, type: 'dashed', opacity: 0.6 } },
-                            { coord: [categoryData[len - 1], stock.MA10], symbol: 'none', label: { formatter: '10MA', position: 'end', color: '#d97706', fontWeight: 'bold' } }
-                        ]);
-                    }
-                    if (stock.MA20) {
-                        markLineData.push([
-                            { coord: [categoryData[0], stock.MA20], symbol: 'none', lineStyle: { color: '#7c3aed', width: 2, type: 'dashed', opacity: 0.6 } },
-                            { coord: [categoryData[len - 1], stock.MA20], symbol: 'none', label: { formatter: '20MA', position: 'end', color: '#7c3aed', fontWeight: 'bold' } }
-                        ]);
-                    }
+                    if (stock.Max_High) markLineData.push({ yAxis: stock.Max_High, lineStyle: { color: '#dc2626', width: 2, type: 'dashed', opacity: 0.8 }, label: { formatter: '前高 {c}', position: 'insideEndTop', color: '#dc2626', fontWeight: 'bold' } });
+                    if (stock.MA5) markLineData.push([ { coord: [categoryData[Math.max(0, len - 5)], stock.MA5], symbol: 'none', lineStyle: { color: '#3b82f6', width: 2, type: 'dashed', opacity: 0.6 } }, { coord: [categoryData[len - 1], stock.MA5], symbol: 'none', label: { formatter: '5MA', position: 'end', color: '#3b82f6', fontWeight: 'bold' } } ]);
+                    if (stock.MA10) markLineData.push([ { coord: [categoryData[Math.max(0, len - 10)], stock.MA10], symbol: 'none', lineStyle: { color: '#d97706', width: 2, type: 'dashed', opacity: 0.6 } }, { coord: [categoryData[len - 1], stock.MA10], symbol: 'none', label: { formatter: '10MA', position: 'end', color: '#d97706', fontWeight: 'bold' } } ]);
+                    if (stock.MA20) markLineData.push([ { coord: [categoryData[0], stock.MA20], symbol: 'none', lineStyle: { color: '#7c3aed', width: 2, type: 'dashed', opacity: 0.6 } }, { coord: [categoryData[len - 1], stock.MA20], symbol: 'none', label: { formatter: '20MA', position: 'end', color: '#7c3aed', fontWeight: 'bold' } } ]);
 
                     const option = {
                         backgroundColor: 'transparent',
                         tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
                         axisPointer: { link: { xAxisIndex: 'all' } },
-                        grid: [
-                            { left: '6%', right: '6%', top: '8%', height: '60%' },
-                            { left: '6%', right: '6%', top: '75%', height: '20%' }
+                        grid: [ 
+                            { left: '6%', right: '6%', top: '8%', height: '55%' }, 
+                            { left: '6%', right: '6%', top: '70%', height: '15%' } 
                         ],
-                        xAxis: [
-                            { type: 'category', data: categoryData, boundaryGap: false, axisLine: { onZero: false }, splitLine: { show: false }, min: 'dataMin', max: 'dataMax' },
-                            { type: 'category', gridIndex: 1, data: categoryData, boundaryGap: false, axisLine: { onZero: false }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false }, min: 'dataMin', max: 'dataMax' }
+                        xAxis: [ 
+                            { type: 'category', data: categoryData, boundaryGap: false, axisLine: { onZero: false }, splitLine: { show: false }, min: 'dataMin', max: 'dataMax' }, 
+                            { type: 'category', gridIndex: 1, data: categoryData, boundaryGap: false, axisLine: { onZero: false }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false }, min: 'dataMin', max: 'dataMax' } 
                         ],
-                        yAxis: [
-                            { scale: true, splitArea: { show: true } },
-                            { scale: true, gridIndex: 1, splitNumber: 2, axisLabel: { show: false }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false } }
+                        yAxis: [ 
+                            { scale: true, splitArea: { show: true } }, 
+                            { scale: true, gridIndex: 1, splitNumber: 2, axisLabel: { show: false }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false } } 
                         ],
-                        series: [
+                        dataZoom: [
                             {
-                                name: 'K線',
-                                type: 'candlestick',
-                                data: values,
-                                itemStyle: { color: '#dc2626', color0: '#16a34a', borderColor: '#dc2626', borderColor0: '#16a34a' },
-                                markLine: { data: markLineData, animation: false }
+                                type: 'inside',
+                                xAxisIndex: [0, 1],
+                                startValue: Math.max(0, categoryData.length - 20),
+                                endValue: categoryData.length - 1
                             },
                             {
-                                name: '成交量',
-                                type: 'bar',
-                                xAxisIndex: 1,
-                                yAxisIndex: 1,
-                                data: volumes
+                                show: true,
+                                type: 'slider',
+                                xAxisIndex: [0, 1],
+                                top: '90%',
+                                startValue: Math.max(0, categoryData.length - 20),
+                                endValue: categoryData.length - 1
                             }
+                        ],
+                        series: [ 
+                            { name: 'K線', type: 'candlestick', data: values, itemStyle: { color: '#dc2626', color0: '#16a34a', borderColor: '#dc2626', borderColor0: '#16a34a' }, markLine: { data: markLineData, animation: false } }, 
+                            { name: '成交量', type: 'bar', xAxisIndex: 1, yAxisIndex: 1, data: volumes } 
                         ]
                     };
-                    
                     myChart.setOption(option);
                     window.addEventListener('resize', () => myChart.resize());
                 };
 
                 return {
-                    stocks, updateDate, loading, fetchFailed, expandedRow,
-                    filter, filteredStocks, applyQuickFilter, fetchData,
+                    stocks, lastUpdate, loading, expandedRow,
+                    filter, filteredStocks, applyQuickFilter,
                     sortKey, sortAsc, sortedStocks, paginatedStocks, setSort, resetFilters,
-                    handleManualUpload, toggleRow, showReturnFilters, isDarkMode, toggleDarkMode,
+                    toggleRow, showReturnFilters, isDarkMode, toggleDarkMode,
                     currentPage, totalPages
                 };
             }

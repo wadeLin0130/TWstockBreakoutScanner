@@ -14,7 +14,6 @@
 <body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans min-h-screen transition-colors duration-200 overflow-x-hidden w-full max-w-full">
     <div id="app" class="flex flex-col min-h-screen w-full max-w-full overflow-x-hidden">
         
-        <!-- 頂部即時大盤跑馬燈 (優化手機版排版) -->
         <div class="bg-slate-900 text-white px-3 py-2 flex flex-col sm:flex-row justify-between items-start sm:items-center text-sm shadow-md shrink-0 z-50 gap-2 w-full">
             <div class="flex items-center gap-2 flex-wrap w-full sm:w-auto">
                 <span class="font-bold tracking-wider text-blue-400 flex items-center gap-1 shrink-0 text-xs sm:text-sm">
@@ -46,7 +45,6 @@
         </div>
 
         <div class="max-w-7xl mx-auto p-3 sm:p-4 md:p-8 w-full max-w-full flex-1">
-            <!-- Header (優化手機版排版，避免擠在一起) -->
             <header class="mb-4 sm:mb-6 flex flex-col gap-3 sm:gap-4 border-b border-gray-300 dark:border-gray-700 pb-3 sm:pb-4 w-full">
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-end w-full gap-3">
                     <div class="w-full sm:w-auto">
@@ -68,28 +66,32 @@
                 </div>
             </header>
 
-            <!-- Loading State -->
             <div v-if="loading" class="text-center py-20">
                 <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500 mx-auto"></div>
                 <p class="mt-4 text-gray-500 dark:text-gray-400 text-sm">正在與 Firebase 建立即時連線...</p>
             </div>
 
-            <!-- Main Workspace -->
             <div v-else-if="stocks.length > 0" class="w-full max-w-full">
                 
-                <!-- 進階篩選列 -->
                 <div class="mb-4 sm:mb-6 bg-white dark:bg-gray-800 p-3 sm:p-5 rounded shadow-sm border border-gray-200 dark:border-gray-700 w-full">
                     <div class="flex flex-col lg:flex-row justify-between lg:items-center mb-3 sm:mb-4 border-b border-gray-100 dark:border-gray-700 pb-3 gap-3">
                         <div class="text-sm font-bold text-gray-700 dark:text-gray-300">進階條件篩選</div>
                         <div class="flex flex-wrap gap-2">
-                            <button @click="applyQuickFilter('pending')" class="text-xs px-2.5 sm:px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition font-medium">強勢即將突破</button>
-                            <button @click="applyQuickFilter('just_breakout')" class="text-xs px-2.5 sm:px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition font-medium">強勢剛突破</button>
-                            <button @click="applyQuickFilter('continuous')" class="text-xs px-2.5 sm:px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition font-medium">持續突破</button>
-                            <button @click="applyQuickFilter('consolidation')" class="text-xs px-2.5 sm:px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition font-medium">高檔整理突破</button>
+                            <button @click="applyQuickFilter('pending')" class="text-xs px-2.5 sm:px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition font-medium">強勢即將首次突破</button>
+                            <button @click="applyQuickFilter('just_breakout')" class="text-xs px-2.5 sm:px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition font-medium">強勢首次突破</button>
+                            <button @click="applyQuickFilter('continuous')" class="text-xs px-2.5 sm:px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition font-medium">持續突破上攻</button>
                         </div>
                     </div>
                     
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="flex flex-col">
+                            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1">距前高天數 (天)</label>
+                            <div class="flex items-center space-x-1">
+                                <input type="number" v-model="filter.daysMin" placeholder="Min" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none">
+                                <span class="text-gray-400">-</span>
+                                <input type="number" v-model="filter.daysMax" placeholder="Max" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none">
+                            </div>
+                        </div>
                         <div class="flex flex-col">
                             <label class="text-xs text-gray-500 dark:text-gray-400 mb-1">已突破幅度 (%)</label>
                             <div class="flex items-center space-x-1">
@@ -171,14 +173,12 @@
                     </div>
                 </div>
 
-                <!-- Main Table (保護不破版) -->
                 <div class="bg-white dark:bg-gray-800 rounded shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden w-full max-w-full">
                     <div class="p-3 sm:p-4 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 flex justify-between items-center">
                         <span class="font-bold text-gray-700 dark:text-gray-200 text-xs sm:text-sm">符合條件共 {{ filteredStocks.length }} 檔標的</span>
-                        <span class="text-xs text-gray-400 dark:text-gray-500 md:hidden">向右滑動查看更多欄位 →</span>
+                        <span class="text-xs text-gray-400 dark:text-gray-500 md:hidden">向右滑動查看更多 →</span>
                     </div>
                     
-                    <!-- 允許內部卷軸，確保不撐寬外層 -->
                     <div class="overflow-x-auto w-full max-w-full">
                         <table class="w-full text-left border-collapse whitespace-nowrap text-sm min-w-full">
                             <thead class="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">
@@ -229,7 +229,10 @@
                                         </td>
                                         <td class="p-3 text-right">
                                             <div class="font-bold text-gray-900 dark:text-gray-100 text-base sm:text-lg mb-0.5">{{ stock.Latest_Price }}</div>
-                                            <div class="text-xs text-gray-500 dark:text-gray-400">{{ stock.Max_High }}</div>
+                                            <div class="text-xs text-gray-500 dark:text-gray-400">
+                                                {{ stock.Max_High }} 
+                                                <span class="text-[10px] ml-1">({{ stock.Days_Since_High }}天前)</span>
+                                            </div>
                                         </td>
                                         <td class="p-3 text-right hidden sm:table-cell">
                                             <div class="text-xs mb-1">
@@ -249,7 +252,6 @@
                                         </td>
                                     </tr>
                                     
-                                    <!-- 展開區塊 (強制使用 whitespace-normal 與 break-words 防止破版) -->
                                     <tr v-if="expandedRow === stock.Symbol" class="bg-gray-50 dark:bg-gray-800 shadow-inner whitespace-normal break-words">
                                         <td colspan="4" class="p-3 sm:p-4 md:p-6 border-b-2 border-gray-300 dark:border-gray-600 w-full max-w-full relative">
                                             <div class="w-full overflow-hidden flex flex-col gap-3 sm:gap-4">
@@ -269,7 +271,6 @@
                                                     <h4 class="font-bold text-gray-800 dark:text-gray-200 text-xs sm:text-sm">近 60 日技術線圖 (可滑動/縮放)</h4>
                                                     <button @click.stop="toggleRow(stock.Symbol)" class="text-xs text-gray-500 hover:text-gray-800 dark:hover:text-white font-medium border border-gray-300 dark:border-gray-600 px-2 py-1 rounded bg-white dark:bg-gray-700 shadow-sm shrink-0">關閉</button>
                                                 </div>
-                                                <!-- 圖表容器，嚴格控制寬度 100% -->
                                                 <div class="w-full bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700 p-1 relative">
                                                     <div :id="'chart-' + stock.Symbol" class="w-full h-[320px] sm:h-[400px]"></div>
                                                 </div>
@@ -296,7 +297,6 @@
         </div>
     </div>
 
-    <!-- 載入 Firebase 模組 -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
         import { getFirestore, collection, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
@@ -316,7 +316,6 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // 新增：產業代碼轉中文對照表
         const INDUSTRY_MAPPING = {
             "01": "水泥工業", "02": "食品工業", "03": "塑膠工業", "04": "紡織纖維",
             "05": "電機機械", "06": "電器電纜", "07": "化學工業", "08": "玻璃陶瓷",
@@ -345,7 +344,9 @@
                 const currentPage = ref(1);
                 const itemsPerPage = 10;
                 
+                // 💥 狀態加入 daysMin, daysMax
                 const filter = ref({
+                    daysMin: null, daysMax: null,
                     todayReturnMin: null, todayReturnMax: null,
                     returnMin: null, returnMax: null,
                     return10dMin: null, return10dMax: null,
@@ -375,7 +376,6 @@
                         if (docSnap.exists()) isMarketOpen.value = docSnap.data().isMarketOpen;
                     });
 
-                    // 由 Firebase 即時監聽大盤指數，無需 FUGLE API Key
                     onSnapshot(doc(db, "System", "Index"), (docSnap) => {
                         if (docSnap.exists()) indexData.value = docSnap.data();
                     });
@@ -384,7 +384,6 @@
                         const newStocks = [];
                         snapshot.forEach((doc) => {
                             let data = doc.data();
-                            // 💥 將富果的數字代碼即時轉譯為中文
                             let indCode = String(data.Industry).padStart(2, '0');
                             data.Industry = INDUSTRY_MAPPING[indCode] || data.Industry;
                             newStocks.push(data);
@@ -403,19 +402,31 @@
                 });
 
                 const resetFilters = () => {
-                    filter.value = { todayReturnMin: null, todayReturnMax: null, returnMin: null, returnMax: null, return10dMin: null, return10dMax: null, return20dMin: null, return20dMax: null, breakoutMin: null, breakoutMax: null, distanceMin: null, distanceMax: null };
+                    filter.value = { daysMin: null, daysMax: null, todayReturnMin: null, todayReturnMax: null, returnMin: null, returnMax: null, return10dMin: null, return10dMax: null, return20dMin: null, return20dMax: null, breakoutMin: null, breakoutMax: null, distanceMin: null, distanceMax: null };
                     filterFlags.value = { disposition: false, attention: false, rating: false };
                     currentPage.value = 1;
                 };
 
+                // 💥 實裝您的三個核心預設條件
                 const applyQuickFilter = (type) => {
                     resetFilters();
                     showReturnFilters.value = true;
                     
-                    if (type === 'pending') { filter.value.returnMin = 10; filter.value.distanceMax = 5; } 
-                    else if (type === 'just_breakout') { filter.value.returnMin = 10; filter.value.breakoutMin = 2; } 
-                    else if (type === 'continuous') { filter.value.returnMin = 10; filter.value.breakoutMin = 0; } 
-                    else if (type === 'consolidation') { filter.value.breakoutMin = 0; filter.value.return20dMin = 10; }
+                    if (type === 'pending') { 
+                        filter.value.daysMin = 5; 
+                        filter.value.returnMin = 10; 
+                        filter.value.distanceMax = 5; // 即將突破代表距離前高小於 5%
+                    } 
+                    else if (type === 'just_breakout') { 
+                        filter.value.daysMin = 5; 
+                        filter.value.returnMin = 10; 
+                        filter.value.breakoutMin = 0.1; 
+                    } 
+                    else if (type === 'continuous') { 
+                        filter.value.daysMax = 3; 
+                        filter.value.returnMin = 5; 
+                        filter.value.breakoutMin = 0; 
+                    } 
                 };
 
                 const filteredStocks = computed(() => {
@@ -449,6 +460,17 @@
                             if (f.distanceMin !== null && f.distanceMin !== '' && stock.Distance_To_High < parseFloat(f.distanceMin)) return false;
                             if (f.distanceMax !== null && f.distanceMax !== '' && stock.Distance_To_High > parseFloat(f.distanceMax)) return false;
                         }
+
+                        // 💥 實裝：距前高天數過濾
+                        const isDaysSet = (f.daysMin !== null && f.daysMin !== '') || (f.daysMax !== null && f.daysMax !== '');
+                        if (isDaysSet) {
+                            if (stock.Days_Since_High === null || stock.Days_Since_High === '' || stock.Days_Since_High === '-') return false;
+                            // 處理 ">360" 字串的情況，給予一個極大值
+                            let dshVal = (typeof stock.Days_Since_High === 'string' && stock.Days_Since_High.includes('>')) ? 999 : parseInt(stock.Days_Since_High);
+                            if (f.daysMin !== null && f.daysMin !== '' && dshVal < parseFloat(f.daysMin)) return false;
+                            if (f.daysMax !== null && f.daysMax !== '' && dshVal > parseFloat(f.daysMax)) return false;
+                        }
+
                         return true;
                     });
                 });

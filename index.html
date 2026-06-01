@@ -221,7 +221,7 @@
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-                                <template v-for="stock in paginatedStocks" :key="stock.Symbol">
+                                <template v-for="stock in sortedStocks" :key="stock.Symbol">
                                     <tr @click="toggleRow(stock.Symbol)" class="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition">
                                         <td class="p-3">
                                             <div class="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{{ stock.Industry }}</div>
@@ -288,13 +288,9 @@
                     </div>
 
                     <div class="bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-3 sm:p-4 flex items-center justify-between">
-                        <span class="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                            共 {{ filteredStocks.length }} 筆 | 頁 {{ currentPage }} / {{ totalPages || 1 }}
+                        <span class="text-xs sm:text-sm text-gray-600 dark:text-gray-400 font-medium">
+                            共顯示 {{ sortedStocks.length }} 筆標的
                         </span>
-                        <div class="flex gap-2">
-                            <button @click="currentPage--" :disabled="currentPage === 1" class="px-2 sm:px-3 py-1 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 text-xs sm:text-sm">上一頁</button>
-                            <button @click="currentPage++" :disabled="currentPage >= totalPages" class="px-2 sm:px-3 py-1 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 text-xs sm:text-sm">下一頁</button>
-                        </div>
                     </div>
 
                 </div>
@@ -345,8 +341,6 @@
                 
                 const showReturnFilters = ref(false);
                 const isDarkMode = ref(false);
-                const currentPage = ref(1);
-                const itemsPerPage = 10;
                 
                 const filter = ref({
                     daysMin: null, daysMax: null,
@@ -402,12 +396,10 @@
                 const resetFilters = () => {
                     filter.value = { daysMin: null, daysMax: null, todayReturnMin: null, todayReturnMax: null, returnMin: null, returnMax: null, return10dMin: null, return10dMax: null, return20dMin: null, return20dMax: null, breakoutMin: null, breakoutMax: null, distanceMin: null, distanceMax: null };
                     filterFlags.value = { disposition: true, attention: true, rating: true, others: true };
-                    currentPage.value = 1;
                 };
 
                 const applyQuickFilter = (type) => {
                     filter.value = { daysMin: null, daysMax: null, todayReturnMin: null, todayReturnMax: null, returnMin: null, returnMax: null, return10dMin: null, return10dMax: null, return20dMin: null, return20dMax: null, breakoutMin: null, breakoutMax: null, distanceMin: null, distanceMax: null };
-                    currentPage.value = 1;
                     showReturnFilters.value = true;
                     
                     if (type === 'pending') { 
@@ -421,6 +413,18 @@
 
                 const filteredStocks = computed(() => {
                     return stocks.value.filter(stock => {
+                        // [核心修正] 基礎過濾：濾除距離前高超過 10% 的淘汰標的
+                        // 嚴格依照盤中/盤後狀態，選擇正確的比較基準價
+                        const basePrice = isMarketOpen.value ? stock.Prev_Close : stock.Latest_Price;
+                        
+                        if (basePrice && stock.Max_High) {
+                            const refDist = ((basePrice - stock.Max_High) / stock.Max_High) * 100;
+                            // 如果距離前高已經超過 -10% (例如 -11%)，強制剔除不顯示
+                            if (refDist < -10.0) {
+                                return false; 
+                            }
+                        }
+
                         const f = filter.value;
                         const ff = filterFlags.value;
 
@@ -469,8 +473,6 @@
                     });
                 });
 
-                watch(filteredStocks, () => { currentPage.value = 1; });
-
                 const sortedStocks = computed(() => {
                     return [...filteredStocks.value].sort((a, b) => {
                         let valA = a[sortKey.value];
@@ -481,12 +483,6 @@
                         let comp = valA > valB ? 1 : -1;
                         return sortAsc.value ? comp : -comp;
                     });
-                });
-
-                const totalPages = computed(() => Math.ceil(sortedStocks.value.length / itemsPerPage));
-                const paginatedStocks = computed(() => {
-                    const start = (currentPage.value - 1) * itemsPerPage;
-                    return sortedStocks.value.slice(start, start + itemsPerPage);
                 });
 
                 const setSort = (key) => {
@@ -611,9 +607,8 @@
                 return {
                     stocks, loading, expandedRow,
                     filter, filterFlags, filteredStocks, applyQuickFilter, isMarketOpen, indexData,
-                    sortKey, sortAsc, sortedStocks, paginatedStocks, setSort, resetFilters,
-                    toggleRow, showReturnFilters, isDarkMode, toggleDarkMode,
-                    currentPage, totalPages
+                    sortKey, sortAsc, sortedStocks, setSort, resetFilters,
+                    toggleRow, showReturnFilters, isDarkMode, toggleDarkMode
                 };
             }
         }).mount('#app');

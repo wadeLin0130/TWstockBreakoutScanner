@@ -152,17 +152,22 @@
                     </div>
 
                     <div class="mt-4 pt-3 sm:pt-4 border-t border-gray-100 dark:border-gray-700 flex flex-wrap gap-3 items-center">
+                        <span class="text-xs font-bold text-gray-500 mr-1">籌碼與狀態：</span>
                         <label class="flex items-center gap-1.5 cursor-pointer text-xs sm:text-sm text-gray-700 dark:text-gray-300 font-medium hover:text-blue-600 transition">
                             <input type="checkbox" v-model="filterFlags.disposition" class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300">
-                            僅看處置股
+                            處置股
                         </label>
                         <label class="flex items-center gap-1.5 cursor-pointer text-xs sm:text-sm text-gray-700 dark:text-gray-300 font-medium hover:text-blue-600 transition">
                             <input type="checkbox" v-model="filterFlags.attention" class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300">
-                            僅看注意股
+                            注意股
                         </label>
                         <label class="flex items-center gap-1.5 cursor-pointer text-xs sm:text-sm text-gray-700 dark:text-gray-300 font-medium hover:text-blue-600 transition">
                             <input type="checkbox" v-model="filterFlags.rating" class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300">
-                            僅看有法人評級
+                            有評級
+                        </label>
+                        <label class="flex items-center gap-1.5 cursor-pointer text-xs sm:text-sm text-gray-700 dark:text-gray-300 font-medium hover:text-blue-600 transition">
+                            <input type="checkbox" v-model="filterFlags.others" class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300">
+                            其他 (無特殊狀態)
                         </label>
                     </div>
                     
@@ -195,7 +200,7 @@
                                                 {{ isMarketOpen ? '即時現價' : '收盤價' }} 
                                                 <span v-if="isMarketOpen" class="w-2 h-2 inline-block rounded-full bg-red-500 animate-pulse"></span>
                                             </div>
-                                            <div class="cursor-pointer hover:text-gray-900 dark:hover:text-white text-xs font-normal" @click="setSort('Max_High')">前高</div>
+                                            <div class="cursor-pointer hover:text-gray-900 dark:hover:text-white text-xs font-normal hidden sm:block" @click="setSort('Max_High')">前高</div>
                                         </div>
                                     </th>
                                     <th class="p-3 text-right hidden sm:table-cell">
@@ -229,7 +234,14 @@
                                         </td>
                                         <td class="p-3 text-right">
                                             <div class="font-bold text-gray-900 dark:text-gray-100 text-base sm:text-lg mb-0.5">{{ stock.Latest_Price }}</div>
-                                            <div class="text-xs text-gray-500 dark:text-gray-400">
+                                            
+                                            <!-- 手機版專屬：今日漲幅顯示在現價下方 -->
+                                            <div class="text-xs font-medium sm:hidden mt-1" :class="stock.Today_Return >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'">
+                                                {{ stock.Today_Return > 0 ? '+' : '' }}{{ stock.Today_Return }}%
+                                            </div>
+
+                                            <!-- 桌機版專屬：前高與天數 -->
+                                            <div class="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">
                                                 {{ stock.Max_High }} 
                                                 <span class="text-[10px] ml-1">({{ stock.Days_Since_High }}天前)</span>
                                             </div>
@@ -344,7 +356,6 @@
                 const currentPage = ref(1);
                 const itemsPerPage = 10;
                 
-                // 💥 狀態加入 daysMin, daysMax
                 const filter = ref({
                     daysMin: null, daysMax: null,
                     todayReturnMin: null, todayReturnMax: null,
@@ -355,7 +366,8 @@
                     distanceMin: null, distanceMax: null
                 });
 
-                const filterFlags = ref({ disposition: false, attention: false, rating: false });
+                // 預設全選，取消勾選即不看該分類
+                const filterFlags = ref({ disposition: true, attention: true, rating: true, others: true });
                 const sortKey = ref('Distance_To_High');
                 const sortAsc = ref(true); 
 
@@ -403,19 +415,20 @@
 
                 const resetFilters = () => {
                     filter.value = { daysMin: null, daysMax: null, todayReturnMin: null, todayReturnMax: null, returnMin: null, returnMax: null, return10dMin: null, return10dMax: null, return20dMin: null, return20dMax: null, breakoutMin: null, breakoutMax: null, distanceMin: null, distanceMax: null };
-                    filterFlags.value = { disposition: false, attention: false, rating: false };
+                    filterFlags.value = { disposition: true, attention: true, rating: true, others: true };
                     currentPage.value = 1;
                 };
 
-                // 💥 實裝您的三個核心預設條件
                 const applyQuickFilter = (type) => {
-                    resetFilters();
+                    // 僅重設數字篩選條件，不重設 filterFlags (保留使用者的籌碼勾選狀態)
+                    filter.value = { daysMin: null, daysMax: null, todayReturnMin: null, todayReturnMax: null, returnMin: null, returnMax: null, return10dMin: null, return10dMax: null, return20dMin: null, return20dMax: null, breakoutMin: null, breakoutMax: null, distanceMin: null, distanceMax: null };
+                    currentPage.value = 1;
                     showReturnFilters.value = true;
                     
                     if (type === 'pending') { 
                         filter.value.daysMin = 5; 
                         filter.value.returnMin = 10; 
-                        filter.value.distanceMax = 5; // 即將突破代表距離前高小於 5%
+                        filter.value.distanceMax = 5; 
                     } 
                     else if (type === 'just_breakout') { 
                         filter.value.daysMin = 5; 
@@ -434,9 +447,17 @@
                         const f = filter.value;
                         const ff = filterFlags.value;
 
-                        if (ff.disposition && (!stock.Status_Tags || !stock.Status_Tags.includes('處置'))) return false;
-                        if (ff.attention && (!stock.Status_Tags || !stock.Status_Tags.includes('注意'))) return false;
-                        if (ff.rating && !stock.Rating) return false;
+                        // 判斷該股屬於哪一個狀態分類
+                        let isDisposition = stock.Status_Tags && stock.Status_Tags.includes('處置');
+                        let isAttention = stock.Status_Tags && stock.Status_Tags.includes('注意');
+                        let hasRating = !!stock.Rating;
+                        let isOther = !isDisposition && !isAttention && !hasRating;
+
+                        // 取消勾選就是不看該分類
+                        if (isDisposition && !ff.disposition) return false;
+                        if (isAttention && !ff.attention) return false;
+                        if (hasRating && !ff.rating) return false;
+                        if (isOther && !ff.others) return false;
 
                         if (f.todayReturnMin !== null && f.todayReturnMin !== '' && stock.Today_Return < parseFloat(f.todayReturnMin)) return false;
                         if (f.todayReturnMax !== null && f.todayReturnMax !== '' && stock.Today_Return > parseFloat(f.todayReturnMax)) return false;
@@ -461,11 +482,9 @@
                             if (f.distanceMax !== null && f.distanceMax !== '' && stock.Distance_To_High > parseFloat(f.distanceMax)) return false;
                         }
 
-                        // 💥 實裝：距前高天數過濾
                         const isDaysSet = (f.daysMin !== null && f.daysMin !== '') || (f.daysMax !== null && f.daysMax !== '');
                         if (isDaysSet) {
                             if (stock.Days_Since_High === null || stock.Days_Since_High === '' || stock.Days_Since_High === '-') return false;
-                            // 處理 ">360" 字串的情況，給予一個極大值
                             let dshVal = (typeof stock.Days_Since_High === 'string' && stock.Days_Since_High.includes('>')) ? 999 : parseInt(stock.Days_Since_High);
                             if (f.daysMin !== null && f.daysMin !== '' && dshVal < parseFloat(f.daysMin)) return false;
                             if (f.daysMax !== null && f.daysMax !== '' && dshVal > parseFloat(f.daysMax)) return false;
@@ -510,6 +529,32 @@
                     if (!stock || !stock.Klines) return;
                     
                     const klines = JSON.parse(stock.Klines);
+                    
+                    // 💥 新增：將即時 OHLC 結合成最新一根跳動 K 線
+                    if (klines.length > 0 && stock.Today_Open && stock.Today_High && stock.Today_Low) {
+                        const todayDate = new Date();
+                        const mm = String(todayDate.getMonth() + 1).padStart(2, '0');
+                        const dd = String(todayDate.getDate()).padStart(2, '0');
+                        const todayStr = `${mm}-${dd}`; // 產出如 "05-31" 格式
+                        
+                        const liveCandle = {
+                            date: todayStr + ' (即時)',
+                            open: parseFloat(stock.Today_Open),
+                            close: parseFloat(stock.Latest_Price),
+                            low: parseFloat(stock.Today_Low),
+                            high: parseFloat(stock.Today_High),
+                            volume: parseInt(stock.Today_Volume || 0)
+                        };
+                        
+                        const lastK = klines[klines.length - 1];
+                        // 判斷最後一根是不是今天，是的話就覆蓋它，否則加在最後面
+                        if (lastK.date.includes(todayStr) || lastK.date.includes('即時')) {
+                            klines[klines.length - 1] = liveCandle;
+                        } else {
+                            klines.push(liveCandle);
+                        }
+                    }
+
                     const chartDom = document.getElementById('chart-' + symbol);
                     if (!chartDom) return;
                     
@@ -523,9 +568,6 @@
                         const isUp = k.close >= k.open;
                         return { value: k.volume, itemStyle: { color: isUp ? '#dc2626' : '#16a34a' } };
                     });
-
-                    const maxKLineHigh = Math.max(...klines.map(k => k.high));
-                    const yAxisMax = Math.ceil(Math.max(stock.Max_High || 0, maxKLineHigh) * 1.05);
 
                     const markLineData = [];
                     if (stock.Max_High) markLineData.push({ yAxis: stock.Max_High, lineStyle: { color: '#dc2626', width: 2, type: 'dashed', opacity: 0.8 }, label: { formatter: '前高 {c}', position: 'insideEndTop', color: '#dc2626', fontWeight: 'bold' } });
@@ -554,7 +596,23 @@
                             { type: 'category', gridIndex: 1, data: categoryData, boundaryGap: false, axisLine: { onZero: false }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false }, min: 'dataMin', max: 'dataMax' } 
                         ],
                         yAxis: [ 
-                            { scale: true, splitArea: { show: true }, max: yAxisMax }, 
+                            { 
+                                scale: true, 
+                                splitArea: { show: true },
+                                min: function (value) { 
+                                    // 抓取當前畫面振幅，底部留白振幅的 10%
+                                    let diff = value.max - value.min;
+                                    if (diff === 0) diff = value.max * 0.01; // 防呆：避免遇到完全沒波動的一字線
+                                    return Math.max(0, value.min - diff * 0.1).toFixed(2);
+                                },
+                                max: function (value) { 
+                                    // 確保前高線一定在畫面內，頂部留白振幅的 10%
+                                    let maxVal = Math.max(value.max, stock.Max_High || 0);
+                                    let diff = maxVal - value.min;
+                                    if (diff === 0) diff = maxVal * 0.01;
+                                    return (maxVal + diff * 0.1).toFixed(2);
+                                }
+                            }, 
                             { scale: true, gridIndex: 1, splitNumber: 2, axisLabel: { show: false }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false } } 
                         ],
                         dataZoom: [

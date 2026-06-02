@@ -37,7 +37,7 @@
             <div class="text-[11px] sm:text-xs text-slate-400 flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end sm:justify-start border-t border-slate-700 sm:border-t-0 pt-1 sm:pt-0 mt-1 sm:mt-0">
                 <span :class="isMarketOpen ? 'text-green-400' : 'text-slate-400'" class="flex items-center gap-1">
                     <span class="w-2 h-2 rounded-full" :class="isMarketOpen ? 'bg-green-500 animate-pulse' : 'bg-slate-500'"></span>
-                    {{ isMarketOpen ? '市場交易中' : '市場已收盤' }}
+                    {{ isMarketOpen ? '市場交易中 (混合雲端秒級推播)' : '市場已收盤' }}
                 </span>
             </div>
         </div>
@@ -51,7 +51,9 @@
                             <span v-else class="w-3 h-3 rounded-full bg-gray-400 shrink-0"></span>
                             台股強勢突破即時監控
                         </h1>
-                        <p class="text-gray-500 dark:text-gray-400 mt-1 text-xs sm:text-sm">{{ isMarketOpen ? '盤中即時串流 (逐筆更新中)' : '盤後靜態報表' }}</p>
+                        <p class="text-gray-500 dark:text-gray-400 mt-1 text-xs sm:text-sm">
+                            架構：靜態底稿 (Firestore) + 即時跳動 (RTDB)
+                        </p>
                     </div>
                     <div class="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto justify-start sm:justify-end">
                         <button @click="toggleDarkMode" class="text-xs sm:text-sm font-medium bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-1.5 sm:px-3 sm:py-1 rounded transition flex items-center shadow-sm shrink-0">
@@ -63,10 +65,10 @@
 
             <div v-if="loading" class="text-center py-20">
                 <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500 mx-auto"></div>
-                <p class="mt-4 text-gray-500 dark:text-gray-400 text-sm">正在與 Firebase 建立即時連線...</p>
+                <p class="mt-4 text-gray-500 dark:text-gray-400 text-sm">正在載入混合雲端資料...</p>
             </div>
 
-            <div v-else-if="stocks.length > 0" class="w-full max-w-full">
+            <div v-else-if="mergedStocks.length > 0" class="w-full max-w-full">
                 
                 <div class="mb-4 sm:mb-6 bg-white dark:bg-gray-800 p-3 sm:p-5 rounded shadow-sm border border-gray-200 dark:border-gray-700 w-full">
                     <div class="flex flex-col lg:flex-row justify-between lg:items-center mb-3 sm:mb-4 border-b border-gray-100 dark:border-gray-700 pb-3 gap-3">
@@ -175,7 +177,7 @@
 
                 <div class="bg-white dark:bg-gray-800 rounded shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden w-full max-w-full">
                     <div class="p-3 sm:p-4 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 flex justify-between items-center">
-                        <span class="font-bold text-gray-700 dark:text-gray-200 text-xs sm:text-sm">符合條件共 {{ filteredStocks.length }} 檔標的</span>
+                        <span class="font-bold text-gray-700 dark:text-gray-200 text-xs sm:text-sm">符合條件共 {{ sortedStocks.length }} 檔標的</span>
                         <span class="text-xs text-gray-400 dark:text-gray-500 md:hidden">向右滑動查看更多 →</span>
                     </div>
                     
@@ -301,6 +303,8 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
         import { getFirestore, collection, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+        // 💥 新增引入 RTDB 模組
+        import { getDatabase, ref as rtdbRef, onValue } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
         
         const { createApp, ref, computed, nextTick, onMounted, watch } = Vue;
 
@@ -311,11 +315,14 @@
             storageBucket: "twsebs-ba9bb.firebasestorage.app",
             messagingSenderId: "314951416631",
             appId: "1:314951416631:web:7dfceb19832bcabed978b2",
-            measurementId: "G-G2N040LC45"
+            measurementId: "G-G2N040LC45",
+            // 💥 注意：若未能在這裡加上 databaseURL，請從 Console 複製後補上，或 Firebase 會自動嘗試推導。
+            // databaseURL: "https://twsebs-ba9bb-default-rtdb.firebaseio.com/"
         };
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
+        const rtdb = getDatabase(app); // 初始化 RTDB
 
         const INDUSTRY_MAPPING = {
             "01": "水泥工業", "02": "食品工業", "03": "塑膠工業", "04": "紡織纖維",
@@ -332,13 +339,13 @@
 
         createApp({
             setup() {
-                const stocks = ref([]);
+                const baseStocks = ref([]); // 來自 Firestore 的靜態底稿
+                const rtdbQuotes = ref({}); // 來自 RTDB 的即時報價
                 const loading = ref(true);
                 const expandedRow = ref(null);
                 const isMarketOpen = ref(false); 
                 
                 const indexData = ref({ price: 0, change: 0, changePct: 0, time: '' });
-                
                 const showReturnFilters = ref(false);
                 const isDarkMode = ref(false);
                 
@@ -369,14 +376,17 @@
                         document.documentElement.classList.add('dark');
                     }
 
+                    // 監聽市場狀態 (Firestore)
                     onSnapshot(doc(db, "System", "Status"), (docSnap) => {
                         if (docSnap.exists()) isMarketOpen.value = docSnap.data().isMarketOpen;
                     });
 
-                    onSnapshot(doc(db, "System", "Index"), (docSnap) => {
-                        if (docSnap.exists()) indexData.value = docSnap.data();
+                    // 監聽大盤即時跳動 (改為 RTDB)
+                    onValue(rtdbRef(rtdb, "System/Index"), (snapshot) => {
+                        if (snapshot.exists()) indexData.value = snapshot.val();
                     });
 
+                    // 💥 1. 取得靜態底稿 (Firestore)
                     onSnapshot(collection(db, "LiveStocks"), (snapshot) => {
                         const newStocks = [];
                         snapshot.forEach((doc) => {
@@ -385,11 +395,33 @@
                             data.Industry = INDUSTRY_MAPPING[indCode] || data.Industry;
                             newStocks.push(data);
                         });
-                        stocks.value = newStocks;
+                        baseStocks.value = newStocks;
                         loading.value = false;
                     }, (error) => {
-                        console.error("Firebase 連線錯誤:", error);
-                        alert("資料庫連線失敗，請檢查設定。");
+                        console.error("Firestore 連線錯誤:", error);
+                    });
+
+                    // 💥 2. 監聽即時報價跳動 (RTDB - 免費無限讀取)
+                    onValue(rtdbRef(rtdb, "live_quotes"), (snapshot) => {
+                        if (snapshot.exists()) {
+                            rtdbQuotes.value = snapshot.val();
+                        } else {
+                            rtdbQuotes.value = {}; // 盤後被清空時
+                        }
+                    }, (error) => {
+                        console.error("RTDB 連線錯誤:", error);
+                    });
+                });
+
+                // 💥 3. 核心：將 Firestore 底稿與 RTDB 即時報價進行合併 (Merge)
+                const mergedStocks = computed(() => {
+                    return baseStocks.value.map(stock => {
+                        const liveData = rtdbQuotes.value[stock.Symbol];
+                        if (liveData) {
+                            // 覆蓋掉底稿中的舊欄位，變成閃動的最新價格
+                            return { ...stock, ...liveData };
+                        }
+                        return stock;
                     });
                 });
 
@@ -411,18 +443,13 @@
                     } 
                 };
 
+                // 改用 mergedStocks 進行過濾
                 const filteredStocks = computed(() => {
-                    return stocks.value.filter(stock => {
-                        // [核心修正] 基礎過濾：濾除距離前高超過 10% 的淘汰標的
-                        // 嚴格依照盤中/盤後狀態，選擇正確的比較基準價
+                    return mergedStocks.value.filter(stock => {
                         const basePrice = isMarketOpen.value ? stock.Prev_Close : stock.Latest_Price;
-                        
                         if (basePrice && stock.Max_High) {
                             const refDist = ((basePrice - stock.Max_High) / stock.Max_High) * 100;
-                            // 如果距離前高已經超過 -10% (例如 -11%)，強制剔除不顯示
-                            if (refDist < -10.0) {
-                                return false; 
-                            }
+                            if (refDist < -10.0) return false; 
                         }
 
                         const f = filter.value;
@@ -495,13 +522,13 @@
                     else { expandedRow.value = symbol; nextTick(() => { renderChart(symbol); }); }
                 };
 
+                // 畫 K 線圖時同樣使用 mergedStocks
                 const renderChart = (symbol) => {
-                    const stock = stocks.value.find(s => s.Symbol === symbol);
+                    const stock = mergedStocks.value.find(s => s.Symbol === symbol);
                     if (!stock || !stock.Klines) return;
                     
                     const klines = JSON.parse(stock.Klines);
                     
-                    // 💥 只有當 isMarketOpen 為 true (盤中) 且有今日報價時，才把跳動中的資料畫進去
                     if (isMarketOpen.value === true && klines.length > 0 && stock.Today_Open && stock.Today_High && stock.Today_Low) {
                         const todayDate = new Date();
                         const mm = String(todayDate.getMonth() + 1).padStart(2, '0');
@@ -605,7 +632,7 @@
                 };
 
                 return {
-                    stocks, loading, expandedRow,
+                    mergedStocks, loading, expandedRow,
                     filter, filterFlags, filteredStocks, applyQuickFilter, isMarketOpen, indexData,
                     sortKey, sortAsc, sortedStocks, setSort, resetFilters,
                     toggleRow, showReturnFilters, isDarkMode, toggleDarkMode

@@ -174,8 +174,8 @@ class YFBackendEngine:
                         "Return_5D": round(ret_5d, 2),
                         "Return_10D": round(ret_10d, 2),
                         "Return_20D": round(ret_20d, 2),
-                        "Breakout_Margin": round(raw_dist, 2) if raw_dist >= 0 else "",
-                        "Distance_To_High": round(abs(raw_dist), 2) if raw_dist < 0 else ""
+                        "Breakout_Margin": round(raw_dist, 2) if raw_dist >= 0 else None,
+                        "Distance_To_High": round(abs(raw_dist), 2) if raw_dist < 0 else None
                     }
             except: pass
 
@@ -376,7 +376,7 @@ class YFBackendEngine:
                             "Return_5D": round(calc_return(latest_close, close_5d), 2), 
                             "Return_10D": round(calc_return(latest_close, close_10d), 2), 
                             "Return_20D": round(calc_return(latest_close, close_20d), 2),
-                            "Breakout_Margin": round(raw_dist, 2) if raw_dist >= 0 else "", "Distance_To_High": round(abs(raw_dist), 2) if raw_dist < 0 else "",
+                            "Breakout_Margin": round(raw_dist, 2) if raw_dist >= 0 else None, "Distance_To_High": round(abs(raw_dist), 2) if raw_dist < 0 else None,
                             
                             "Status_Tags": "-",
                             "Rating": rating, "Company_Info": "", "YF_Symbol": yf_sym,

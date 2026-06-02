@@ -250,8 +250,8 @@
                                         </td>
                                         <td class="p-3 text-right">
                                             <div class="text-xs mt-1 sm:mt-2">
-                                                <span v-if="stock.Breakout_Margin !== null && stock.Breakout_Margin !== ''" class="font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-1 py-0.5 rounded">突破 +{{ stock.Breakout_Margin }}%</span>
-                                                <span v-else-if="stock.Distance_To_High !== null && stock.Distance_To_High !== ''" class="font-medium text-gray-500 dark:text-gray-400">距離前高還有多遠 {{ stock.Distance_To_High }}%</span>
+                                                <span v-if="stock.Breakout_Margin != null && stock.Breakout_Margin !== '' && !isNaN(Number(stock.Breakout_Margin))" class="font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-1 py-0.5 rounded">突破 +{{ stock.Breakout_Margin }}%</span>
+                                                <span v-else-if="stock.Distance_To_High != null && stock.Distance_To_High !== '' && !isNaN(Number(stock.Distance_To_High))" class="font-medium text-gray-500 dark:text-gray-400">距離前高還有多遠 {{ stock.Distance_To_High }}%</span>
                                             </div>
                                         </td>
                                     </tr>
@@ -473,16 +473,18 @@
                         
                         const isBreakoutSet = (f.breakoutMin !== null && f.breakoutMin !== '') || (f.breakoutMax !== null && f.breakoutMax !== '');
                         if (isBreakoutSet) {
-                            if (stock.Breakout_Margin === null || stock.Breakout_Margin === '') return false;
-                            if (f.breakoutMin !== null && f.breakoutMin !== '' && stock.Breakout_Margin < parseFloat(f.breakoutMin)) return false;
-                            if (f.breakoutMax !== null && f.breakoutMax !== '' && stock.Breakout_Margin > parseFloat(f.breakoutMax)) return false;
+                            const bm = stock.Breakout_Margin;
+                            if (bm == null || bm === '' || isNaN(Number(bm))) return false;
+                            if (f.breakoutMin !== null && f.breakoutMin !== '' && Number(bm) < parseFloat(f.breakoutMin)) return false;
+                            if (f.breakoutMax !== null && f.breakoutMax !== '' && Number(bm) > parseFloat(f.breakoutMax)) return false;
                         }
 
                         const isDistanceSet = (f.distanceMin !== null && f.distanceMin !== '') || (f.distanceMax !== null && f.distanceMax !== '');
                         if (isDistanceSet) {
-                            if (stock.Distance_To_High === null || stock.Distance_To_High === '') return false;
-                            if (f.distanceMin !== null && f.distanceMin !== '' && stock.Distance_To_High < parseFloat(f.distanceMin)) return false;
-                            if (f.distanceMax !== null && f.distanceMax !== '' && stock.Distance_To_High > parseFloat(f.distanceMax)) return false;
+                            const dh = stock.Distance_To_High;
+                            if (dh == null || dh === '' || isNaN(Number(dh))) return false;
+                            if (f.distanceMin !== null && f.distanceMin !== '' && Number(dh) < parseFloat(f.distanceMin)) return false;
+                            if (f.distanceMax !== null && f.distanceMax !== '' && Number(dh) > parseFloat(f.distanceMax)) return false;
                         }
 
                         const isDaysSet = (f.daysMin !== null && f.daysMin !== '') || (f.daysMax !== null && f.daysMax !== '');

@@ -1,0 +1,76 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+.conda/
+
+# IDE / Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs and local data
+*.log
+*.tmp
+*.bak
+*.cache
+
+# Project secrets - NEVER commit real keys
+.env
+.env.local
+serviceAccountKey.json
+*.pem
+*.key
+
+# Generated / large data (this project produces these at runtime)
+breakout_daily_list.csv
+data_cache/
+debug/
+klines_*/
+stats_*.csv
+last_tickers.csv
+ai_summaries.json
+
+# Firebase / other temp
+firebase-debug.log
+firestore-debug.log
+
+# Optional: if you want to track a "latest signals" snapshot, force-add it:
+# !breakout_daily_list.csv

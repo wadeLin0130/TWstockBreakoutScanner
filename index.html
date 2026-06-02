@@ -303,7 +303,6 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
         import { getFirestore, collection, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
-        // 💥 新增引入 RTDB 模組
         import { getDatabase, ref as rtdbRef, onValue } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
         
         const { createApp, ref, computed, nextTick, onMounted, watch } = Vue;
@@ -316,13 +315,13 @@
             messagingSenderId: "314951416631",
             appId: "1:314951416631:web:7dfceb19832bcabed978b2",
             measurementId: "G-G2N040LC45",
-            // 💥 注意：若未能在這裡加上 databaseURL，請從 Console 複製後補上，或 Firebase 會自動嘗試推導。
-            // databaseURL: "https://twsebs-ba9bb-default-rtdb.firebaseio.com/"
+            // 解開註解：確保前端能順利接上 Realtime Database，取得推播
+            databaseURL: "https://twsebs-ba9bb-default-rtdb.firebaseio.com/"
         };
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
-        const rtdb = getDatabase(app); // 初始化 RTDB
+        const rtdb = getDatabase(app); 
 
         const INDUSTRY_MAPPING = {
             "01": "水泥工業", "02": "食品工業", "03": "塑膠工業", "04": "紡織纖維",
@@ -339,8 +338,8 @@
 
         createApp({
             setup() {
-                const baseStocks = ref([]); // 來自 Firestore 的靜態底稿
-                const rtdbQuotes = ref({}); // 來自 RTDB 的即時報價
+                const baseStocks = ref([]); 
+                const rtdbQuotes = ref({}); 
                 const loading = ref(true);
                 const expandedRow = ref(null);
                 const isMarketOpen = ref(false); 
@@ -376,17 +375,14 @@
                         document.documentElement.classList.add('dark');
                     }
 
-                    // 監聽市場狀態 (Firestore)
                     onSnapshot(doc(db, "System", "Status"), (docSnap) => {
                         if (docSnap.exists()) isMarketOpen.value = docSnap.data().isMarketOpen;
                     });
 
-                    // 監聽大盤即時跳動 (改為 RTDB)
                     onValue(rtdbRef(rtdb, "System/Index"), (snapshot) => {
                         if (snapshot.exists()) indexData.value = snapshot.val();
                     });
 
-                    // 💥 1. 取得靜態底稿 (Firestore)
                     onSnapshot(collection(db, "LiveStocks"), (snapshot) => {
                         const newStocks = [];
                         snapshot.forEach((doc) => {
@@ -401,7 +397,6 @@
                         console.error("Firestore 連線錯誤:", error);
                     });
 
-                    // 💥 2. 監聽即時報價跳動 (RTDB - 免費無限讀取)
                     onValue(rtdbRef(rtdb, "live_quotes"), (snapshot) => {
                         if (snapshot.exists()) {
                             rtdbQuotes.value = snapshot.val();
@@ -417,11 +412,64 @@
                 const mergedStocks = computed(() => {
                     return baseStocks.value.map(stock => {
                         const liveData = rtdbQuotes.value[stock.Symbol];
+                        let merged = { ...stock };
+                        
                         if (liveData) {
-                            // 覆蓋掉底稿中的舊欄位，變成閃動的最新價格
-                            return { ...stock, ...liveData };
+                            merged = { ...merged, ...liveData };
                         }
-                        return stock;
+
+                        // 💥 終極修復：完全在前端還原基準點！不再信任後端的靜態欄位
+                        // 盤中利用已保存的 60 日 K 線(不含今天)，重新計算所有前高與基期
+                        if (merged.Klines) {
+                            try {
+                                const klines = typeof merged.Klines === 'string' ? JSON.parse(merged.Klines) : merged.Klines;
+                                if (klines && klines.length > 0) {
+                                    const len = klines.length;
+                                    
+                                    // 1. 取得昨收價 (即底稿最後一筆 K 線的收盤價)
+                                    const refPrice = klines[len - 1].close;
+                                    
+                                    // 2. 歷史前高 (嚴格不包含今天盤中的高點)
+                                    let maxHigh = 0;
+                                    let maxHighIdx = 0;
+                                    for (let i = 0; i < len; i++) {
+                                        if (klines[i].high > maxHigh) {
+                                            maxHigh = klines[i].high;
+                                            maxHighIdx = i;
+                                        }
+                                    }
+                                    merged.Max_High = maxHigh;
+                                    merged.Days_Since_High = len - 1 - maxHighIdx;
+
+                                    // 3. 歷史近 N 日基準價 (往前推 5, 10, 20 天的收盤)
+                                    const base5 = klines[Math.max(0, len - 5)].close;
+                                    const base10 = klines[Math.max(0, len - 10)].close;
+                                    const base20 = klines[Math.max(0, len - 20)].close;
+
+                                    // 4. 當前現價 (優先取 RTDB 推播的最新價，沒有則用昨收)
+                                    const currentPrice = parseFloat(merged.Latest_Price) || refPrice;
+
+                                    // 5. 強制覆寫所有漲跌幅，確保永遠對齊正確基準
+                                    if (refPrice > 0) {
+                                        merged.Today_Return = Number((((currentPrice - refPrice) / refPrice) * 100).toFixed(2));
+                                    }
+                                    if (base5 > 0) merged.Return_5D = Number((((currentPrice - base5) / base5) * 100).toFixed(2));
+                                    if (base10 > 0) merged.Return_10D = Number((((currentPrice - base10) / base10) * 100).toFixed(2));
+                                    if (base20 > 0) merged.Return_20D = Number((((currentPrice - base20) / base20) * 100).toFixed(2));
+
+                                    // 6. 重新計算突破幅度與距離
+                                    if (maxHigh > 0) {
+                                        const rawDist = ((currentPrice - maxHigh) / maxHigh) * 100;
+                                        merged.Breakout_Margin = rawDist >= 0 ? Number(rawDist.toFixed(2)) : "";
+                                        merged.Distance_To_High = rawDist < 0 ? Number(Math.abs(rawDist).toFixed(2)) : "";
+                                    }
+                                }
+                            } catch (e) {
+                                console.error("Klines 解析錯誤", e);
+                            }
+                        }
+
+                        return merged;
                     });
                 });
 
@@ -443,12 +491,8 @@
                     } 
                 };
 
-                // 改用 mergedStocks 進行過濾
                 const filteredStocks = computed(() => {
                     return mergedStocks.value.filter(stock => {
-                        
-                        // 💥 前端修正：不管是不是盤中，跌落前高這件事本來就是看「現價」
-                        // 因此不管何時，都一律使用即時跳動的 Latest_Price 來計算乖離
                         const basePrice = stock.Latest_Price;
                         
                         if (basePrice && stock.Max_High) {
@@ -526,7 +570,6 @@
                     else { expandedRow.value = symbol; nextTick(() => { renderChart(symbol); }); }
                 };
 
-                // 畫 K 線圖時同樣使用 mergedStocks
                 const renderChart = (symbol) => {
                     const stock = mergedStocks.value.find(s => s.Symbol === symbol);
                     if (!stock || !stock.Klines) return;

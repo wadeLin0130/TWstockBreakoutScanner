@@ -251,7 +251,7 @@
                                         <td class="p-3 text-right">
                                             <div class="text-xs mt-1 sm:mt-2">
                                                 <span v-if="stock.Breakout_Margin != null && stock.Breakout_Margin !== '' && !isNaN(Number(stock.Breakout_Margin))" class="font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-1 py-0.5 rounded">突破 +{{ stock.Breakout_Margin }}%</span>
-                                                <span v-else-if="stock.Distance_To_High != null && stock.Distance_To_High !== '' && !isNaN(Number(stock.Distance_To_High))" class="font-medium text-gray-500 dark:text-gray-400">距離前高還有多遠 {{ stock.Distance_To_High }}%</span>
+                                                <span v-else-if="stock.Distance_To_High != null && stock.Distance_To_High !== '' && !isNaN(Number(stock.Distance_To_High))" class="font-medium text-gray-500 dark:text-gray-400">距前高 {{ stock.Distance_To_High }}%</span>
                                             </div>
                                         </td>
                                     </tr>

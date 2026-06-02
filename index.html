@@ -213,7 +213,7 @@
                                         <div class="flex flex-col items-end gap-1">
                                             <div class="text-xs font-normal">
                                                 <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Breakout_Margin')">已突破%</span> / 
-                                                <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Distance_To_High')">距前高%</span>
+                                                <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Distance_To_High')">距前高</span>
                                             </div>
                                         </div>
                                     </th>
@@ -227,14 +227,14 @@
                                             <div class="font-bold text-blue-600 dark:text-blue-400">{{ stock.Symbol }} {{ stock.Name }}</div>
                                         </td>
                                         <td class="p-3 text-right">
-                                            <div class="font-bold text-gray-900 dark:text-gray-100 text-base sm:text-lg mb-0.5">{{ stock.Latest_Price }}</div>
+                                            <div class="font-bold text-gray-900 dark:text-gray-100 text-base sm:text-lg mb-0.5">{{ formatPrice(stock.Latest_Price) }}</div>
                                             
                                             <div class="text-xs font-medium sm:hidden mt-1" :class="stock.Today_Return >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'">
                                                 {{ stock.Today_Return > 0 ? '+' : '' }}{{ stock.Today_Return }}%
                                             </div>
 
                                             <div class="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">
-                                                {{ stock.Max_High }} 
+                                                {{ formatPrice(stock.Max_High) }} 
                                                 <span class="text-[10px] ml-1">({{ stock.Days_Since_High }}天前)</span>
                                             </div>
                                         </td>
@@ -251,7 +251,7 @@
                                         <td class="p-3 text-right">
                                             <div class="text-xs mt-1 sm:mt-2">
                                                 <span v-if="stock.Breakout_Margin !== null && stock.Breakout_Margin !== ''" class="font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-1 py-0.5 rounded">突破 +{{ stock.Breakout_Margin }}%</span>
-                                                <span v-else-if="stock.Distance_To_High !== null && stock.Distance_To_High !== ''" class="font-medium text-gray-500 dark:text-gray-400">距離 {{ stock.Distance_To_High }}%</span>
+                                                <span v-else-if="stock.Distance_To_High !== null && stock.Distance_To_High !== ''" class="font-medium text-gray-500 dark:text-gray-400">距離前高還有多遠 {{ stock.Distance_To_High }}%</span>
                                             </div>
                                         </td>
                                     </tr>
@@ -357,6 +357,13 @@
                 const filterFlags = ref({ disposition: true, attention: true, rating: true, others: true });
                 const sortKey = ref('Distance_To_High');
                 const sortAsc = ref(true); 
+
+                const formatPrice = (val) => {
+                    if (val === null || val === undefined || val === '') return '';
+                    const n = parseFloat(val);
+                    if (isNaN(n)) return val;
+                    return n.toFixed(2);
+                };
 
                 const toggleDarkMode = () => {
                     isDarkMode.value = !isDarkMode.value;
@@ -624,7 +631,8 @@
                     mergedStocks, loading, expandedRow,
                     filter, filterFlags, filteredStocks, applyQuickFilter, isMarketOpen, indexData,
                     sortKey, sortAsc, sortedStocks, setSort, resetFilters,
-                    toggleRow, showReturnFilters, isDarkMode, toggleDarkMode
+                    toggleRow, showReturnFilters, isDarkMode, toggleDarkMode,
+                    formatPrice
                 };
             }
         }).mount('#app');

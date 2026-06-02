@@ -319,13 +319,13 @@ class YFBackendEngine:
                     ma10 = df['close'].rolling(10).mean().iloc[-1]
                     ma20 = df['close'].rolling(20).mean().iloc[-1]
                     
-                    latest_close = df['close'].iloc[-1]
+                    latest_close = round(float(df['close'].iloc[-1]), 2)
                     
                     if len(df) > 1:
-                        yesterday_close = df['close'].iloc[-2]
+                        yesterday_close = round(float(df['close'].iloc[-2]), 2)
                         # 前高：除了最新 K 線外，歷史最高
                         df_history = df.iloc[:-1] 
-                        prev_max_high = df_history['high'].max()
+                        prev_max_high = round(float(df_history['high'].max()), 2)
                         days_since_high = int(len(df) - 1 - df_history['high'].idxmax())
                     else:
                         yesterday_close = latest_close
@@ -334,9 +334,9 @@ class YFBackendEngine:
 
                     if latest_close > 0 and prev_max_high > 0 and (latest_close * 1.1 >= prev_max_high):
                         
-                        close_5d = df['close'].iloc[-6] if len(df) >= 6 else df['close'].iloc[0]
-                        close_10d = df['close'].iloc[-11] if len(df) >= 11 else df['close'].iloc[0]
-                        close_20d = df['close'].iloc[-21] if len(df) >= 21 else df['close'].iloc[0]
+                        close_5d = round(float(df['close'].iloc[-6]) if len(df) >= 6 else df['close'].iloc[0], 2)
+                        close_10d = round(float(df['close'].iloc[-11]) if len(df) >= 11 else df['close'].iloc[0], 2)
+                        close_20d = round(float(df['close'].iloc[-21]) if len(df) >= 21 else df['close'].iloc[0], 2)
                         
                         def calc_return(current, old): 
                             return ((current - old) / old) * 100 if old > 0 else 0.0
@@ -345,14 +345,26 @@ class YFBackendEngine:
                         raw_dist = calc_return(latest_close, prev_max_high)
                         
                         df_chart = df.tail(60)
-                        klines = [{"date": str(r['date'])[:10].split('-', 1)[1], "open": r['open'], "close": r['close'], "low": r['low'], "high": r['high'], "volume": int(r['volume'])} for _, r in df_chart.iterrows()]
+                        klines = [{
+                            "date": str(r['date'])[:10].split('-', 1)[1], 
+                            "open": round(float(r['open']), 2), 
+                            "close": round(float(r['close']), 2), 
+                            "low": round(float(r['low']), 2), 
+                            "high": round(float(r['high']), 2), 
+                            "volume": int(r['volume'])
+                        } for _, r in df_chart.iterrows()]
                         df_last = df.iloc[-1]
+                        
+                        today_open = round(float(df_last['open']), 2)
+                        today_high = round(float(df_last['high']), 2)
+                        today_low = round(float(df_last['low']), 2)
+                        today_vol = int(df_last['volume'])
                         
                         rating = self.fetch_yfinance_rating(yf_sym)
                         
                         breakout_list.append({
                             "Industry": stock['industry'], "Symbol": symbol, "Name": stock['name'],
-                            "Latest_Price": latest_close, "Today_Open": df_last['open'], "Today_High": df_last['high'], "Today_Low": df_last['low'], "Today_Volume": int(df_last['volume']),
+                            "Latest_Price": latest_close, "Today_Open": today_open, "Today_High": today_high, "Today_Low": today_low, "Today_Volume": today_vol,
                             "Max_High": prev_max_high, "Days_Since_High": days_since_high, 
                             
                             "Ref_Close": yesterday_close,

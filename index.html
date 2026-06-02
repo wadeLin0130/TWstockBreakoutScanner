@@ -446,7 +446,11 @@
                 // 改用 mergedStocks 進行過濾
                 const filteredStocks = computed(() => {
                     return mergedStocks.value.filter(stock => {
-                        const basePrice = isMarketOpen.value ? stock.Prev_Close : stock.Latest_Price;
+                        
+                        // 💥 前端修正：不管是不是盤中，跌落前高這件事本來就是看「現價」
+                        // 因此不管何時，都一律使用即時跳動的 Latest_Price 來計算乖離
+                        const basePrice = stock.Latest_Price;
+                        
                         if (basePrice && stock.Max_High) {
                             const refDist = ((basePrice - stock.Max_High) / stock.Max_High) * 100;
                             if (refDist < -10.0) return false; 

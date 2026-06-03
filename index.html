@@ -498,14 +498,25 @@
 
                 });
 
-                // 最單純的合併，完全不覆寫數值
+                // 最單純的合併，fs 優先 + rtdb 附加；並用「現有 K線圖」邏輯 override 前高/漲幅（最新 bar 不算入前高）
                 const mergedStocks = computed(() => {
                     return baseStocks.value.map(stock => {
                         const liveData = rtdbQuotes.value[stock.Symbol];
+                        let merged = stock;
                         if (liveData) {
-                            return { ...stock, ...liveData };
+                            merged = { ...stock, ...liveData };
                         }
-                        return stock;
+                        // 統一用 effective 計算（fs 優先畫圖，rtdb 附加；前高永遠從 chartKlines 倒數第二起算）
+                        const eff = getEffectiveChartKlinesAndPreMetrics(stock.Klines, liveData, isMarketOpen.value);
+                        merged.Max_High = eff.maxHigh;
+                        merged.Days_Since_High = eff.daysSinceHigh;
+                        merged.Distance_To_High = eff.distanceToHigh;
+                        merged.Breakout_Margin = (eff.distanceToHigh > 0 ? eff.distanceToHigh : null);
+                        merged.Today_Return = eff.todayReturn;
+                        merged.Return_5D = eff.return5D;
+                        merged.Return_10D = eff.return10D;
+                        merged.Return_20D = eff.return20D;
+                        return merged;
                     });
                 });
 
@@ -671,6 +682,93 @@
                     }).length;
                 });
 
+                // 共享 helper：依 fs/rtdb 規則決定「畫圖用」的 K線陣列（chartKlines）
+                // 並從該陣列計算「前高系列」（永遠排除最新 bar）
+                function getEffectiveChartKlinesAndPreMetrics(baseKlinesRaw, liveData, isMarket) {
+                    let baseKlines = [];
+                    if (typeof baseKlinesRaw === 'string') {
+                        try { baseKlines = JSON.parse(baseKlinesRaw); } catch(e) { baseKlines = []; }
+                    } else if (Array.isArray(baseKlinesRaw)) {
+                        baseKlines = baseKlinesRaw;
+                    }
+                    let chartKlines = baseKlines;
+                    let currentCloseForMetrics = (baseKlines.length ? baseKlines[baseKlines.length-1].close : 0);
+                    if (isMarket && liveData && liveData.Latest_Price) {
+                        const todayDate = new Date();
+                        const mm = String(todayDate.getMonth() + 1).padStart(2, '0');
+                        const dd = String(todayDate.getDate()).padStart(2, '0');
+                        const todayStr = `${mm}-${dd}`;
+                        const liveCandle = {
+                            date: todayStr + ' (即時)',
+                            open: parseFloat(liveData.Today_Open || liveData.Latest_Price) || 0,
+                            close: parseFloat(liveData.Latest_Price) || 0,
+                            low: parseFloat(liveData.Today_Low || liveData.Latest_Price) || 0,
+                            high: parseFloat(liveData.Today_High || liveData.Latest_Price) || 0,
+                            volume: parseInt(liveData.Today_Volume || 0)
+                        };
+                        currentCloseForMetrics = liveCandle.close;
+                        if (baseKlines.length > 0) {
+                            const lastBaseDay = (baseKlines[baseKlines.length-1].date || '').split(' ')[0];
+                            if (lastBaseDay === todayStr) {
+                                chartKlines = baseKlines;  // 同一天，用 fs 畫圖
+                            } else {
+                                chartKlines = [...baseKlines, liveCandle];
+                            }
+                        } else {
+                            chartKlines = [liveCandle];
+                        }
+                    }
+                    // 從「現有 chartKlines」計算前高（倒數第二根起算，最新不要算）
+                    let maxH = 0, daysS = 0, dist = 0;
+                    if (chartKlines.length > 1) {
+                        const preK = chartKlines.slice(0, -1);
+                        const phs = preK.map(k => k.high || 0);
+                        const mhv = Math.max(...phs);
+                        maxH = Math.round(mhv * 100) / 100;
+                        let ridx = 0;
+                        for (let i=preK.length-1; i>=0; i--) {
+                            if (Math.abs((preK[i].high||0) - mhv) < 0.001) { ridx = i; break; }
+                        }
+                        daysS = preK.length - 1 - ridx;
+                        const lclose = currentCloseForMetrics || (chartKlines[chartKlines.length-1].close || 0);
+                        if (maxH > 0 && lclose > 0) {
+                            const den = Math.min(lclose, maxH);
+                            dist = Math.round( (lclose - maxH) / den * 100 * 100 ) / 100;
+                        }
+                    } else if (chartKlines.length === 1) {
+                        maxH = chartKlines[0].high || 0;
+                    }
+                    // 同時計算漲幅（一樣邏輯，用 chartKlines 的倒數第二作為 base）
+                    let tR = 0, r5=0, r10=0, r20=0;
+                    const lclose = currentCloseForMetrics || (chartKlines.length ? chartKlines[chartKlines.length-1].close : 0);
+                    if (chartKlines.length > 1) {
+                        const pclose = chartKlines[chartKlines.length-2].close || 0;
+                        tR = pclose > 0 ? Math.round( (lclose - pclose) / pclose * 100 * 100 ) / 100 : 0;
+                    }
+                    if (chartKlines.length > 5) {
+                        const b5 = chartKlines[chartKlines.length-6].close || 0;
+                        r5 = b5 > 0 ? Math.round( (lclose - b5) / b5 * 100 * 100 ) / 100 : 0;
+                    }
+                    if (chartKlines.length > 10) {
+                        const b10 = chartKlines[chartKlines.length-11].close || 0;
+                        r10 = b10 > 0 ? Math.round( (lclose - b10) / b10 * 100 * 100 ) / 100 : 0;
+                    }
+                    if (chartKlines.length > 20) {
+                        const b20 = chartKlines[chartKlines.length-21].close || 0;
+                        r20 = b20 > 0 ? Math.round( (lclose - b20) / b20 * 100 * 100 ) / 100 : 0;
+                    }
+                    return {
+                        chartKlines,
+                        maxHigh: maxH,
+                        daysSinceHigh: daysS,
+                        distanceToHigh: dist,
+                        todayReturn: tR,
+                        return5D: r5,
+                        return10D: r10,
+                        return20D: r20
+                    };
+                }
+
                 const toggleRow = (symbol) => {
                     if (expandedRow.value === symbol) { expandedRow.value = null; } 
                     else { expandedRow.value = symbol; nextTick(() => { renderChart(symbol); }); }
@@ -680,32 +778,14 @@
                     const stock = mergedStocks.value.find(s => s.Symbol === symbol);
                     if (!stock || !stock.Klines) return;
                     
-                    const klines = typeof stock.Klines === 'string' ? JSON.parse(stock.Klines) : stock.Klines;
-                    
-                    // 只在有即時 live 資料（WS 已推送當日 Today_*）時才附加/更新今日即時K線，避免開盤前或資料未到時用昨日的 Today_* 值複製出完全一樣的K線
-                    const hasLiveData = !!rtdbQuotes.value[symbol];
-                    if (isMarketOpen.value === true && klines.length > 0 && hasLiveData && stock.Today_Open && stock.Today_High && stock.Today_Low) {
-                        const todayDate = new Date();
-                        const mm = String(todayDate.getMonth() + 1).padStart(2, '0');
-                        const dd = String(todayDate.getDate()).padStart(2, '0');
-                        const todayStr = `${mm}-${dd}`;
-                        
-                        const liveCandle = {
-                            date: todayStr + ' (即時)',
-                            open: parseFloat(stock.Today_Open),
-                            close: parseFloat(stock.Latest_Price),
-                            low: parseFloat(stock.Today_Low),
-                            high: parseFloat(stock.Today_High),
-                            volume: parseInt(stock.Today_Volume || 0)
-                        };
-                        
-                        const lastK = klines[klines.length - 1];
-                        if (lastK.date.includes(todayStr) || lastK.date.includes('即時')) {
-                            klines[klines.length - 1] = liveCandle;
-                        } else {
-                            klines.push(liveCandle);
-                        }
-                    }
+                    const baseKlinesRaw = stock.Klines;
+                    const liveD = rtdbQuotes.value[symbol];
+                    const eff = getEffectiveChartKlinesAndPreMetrics(baseKlinesRaw, liveD, isMarketOpen.value);
+                    const chartKlines = eff.chartKlines;
+                    const computedMaxHigh = eff.maxHigh;
+                    const computedDaysSince = eff.daysSinceHigh;
+                    const computedDist = eff.distanceToHigh;
+                    let livePriceForCalc = (liveD && liveD.Latest_Price) ? liveD.Latest_Price : (chartKlines.length ? chartKlines[chartKlines.length-1].close : stock.Latest_Price);
 
                     const chartDom = document.getElementById('chart-' + symbol);
                     if (!chartDom) return;
@@ -730,22 +810,22 @@
                     // 禁止 chart 區域的拖移/縮放手勢，讓拖移只會造成列表上下滑；僅 slider 控制縮放
                     chartDom.style.touchAction = 'pan-y';
                     
-                    const categoryData = klines.map(k => k.date);
-                    const values = klines.map(k => [k.open, k.close, k.low, k.high]);
-                    const volumes = klines.map(k => {
+                    const categoryData = chartKlines.map(k => k.date);
+                    const values = chartKlines.map(k => [k.open, k.close, k.low, k.high]);
+                    const volumes = chartKlines.map(k => {
                         const isUp = k.close >= k.open;
                         return { value: k.volume, itemStyle: { color: isUp ? '#dc2626' : '#16a34a' } };
                     });
 
                     const markLineData = [];
-                    if (stock.Max_High) markLineData.push({ yAxis: stock.Max_High, lineStyle: { color: '#dc2626', width: 2, type: 'dashed', opacity: 0.8 }, label: { formatter: '前高 {c}', position: 'insideEndTop', color: '#dc2626', fontWeight: 'bold' } });
+                    if (computedMaxHigh > 0) markLineData.push({ yAxis: computedMaxHigh, lineStyle: { color: '#dc2626', width: 2, type: 'dashed', opacity: 0.8 }, label: { formatter: '前高 {c}', position: 'insideEndTop', color: '#dc2626', fontWeight: 'bold' } });
 
                     const calculateMA = (dayCount) => {
                         var result = [];
-                        for (var i = 0; i < klines.length; i++) {
+                        for (var i = 0; i < chartKlines.length; i++) {
                             if (i < dayCount - 1) { result.push('-'); continue; }
                             var sum = 0;
-                            for (var j = 0; j < dayCount; j++) sum += klines[i - j].close;
+                            for (var j = 0; j < dayCount; j++) sum += chartKlines[i - j].close;
                             result.push(Number((sum / dayCount).toFixed(2)));
                         }
                         return result;

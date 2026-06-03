@@ -713,16 +713,19 @@ class YFBackendEngine:
                     
                     latest_close = round(float(df['close'].iloc[-1]), 2)
                     
-                    # 計算「前高」與「距前高天數」：使用整個歷史的最高高點，以及「最近一次」達到該高點的時間（以 bar 數計交易日）。
-                    # 這樣如果昨天（最新 K 線）創新高，Max_High 就會是昨天的 high，Days_Since_High=0，符合「昨天創新高的標的，前高改成昨天 high」的正確邏輯。
-                    # 不再用「排除最新 K 線」的舊做法（那會導致新高日的前高永遠是舊的）。
-                    # days_since_high = 0 表示前高就發生在最新 bar（即 daily 跑當天 / 給隔天看的「昨天」）。
+                    # 統一邏輯：前高定義永遠從「現有 K 線圖的倒數第二根」起算（最新 bar 不算入前高）。
+                    # Firestore 資料優先，RTDB 附加最新 bar（如果更「新的一天」）。
+                    # 無論 batch 或 live view，前高 / 漲幅 base 都基於「K線倒數第二根」之前的歷史。
                     if len(df) > 0:
-                        max_high_val = float(df['high'].max())
-                        prev_max_high = round(max_high_val, 2)
-                        # 取「最後一次」（最近一次）達到 max high 的位置
-                        recent_high_idx = df[df['high'] == max_high_val].index[-1]
-                        days_since_high = int(len(df) - 1 - recent_high_idx)
+                        pre_df = df.iloc[:-1] if len(df) > 1 else df
+                        if len(pre_df) > 0:
+                            max_high_val = float(pre_df['high'].max())
+                            prev_max_high = round(max_high_val, 2)
+                            recent_high_idx = pre_df[pre_df['high'] == max_high_val].index[-1]
+                            days_since_high = int(len(pre_df) - 1 - recent_high_idx)
+                        else:
+                            prev_max_high = latest_close
+                            days_since_high = 0
                         if len(df) > 1:
                             yesterday_close = round(float(df['close'].iloc[-2]), 2)
                         else:

@@ -310,9 +310,8 @@
                                         <td class="p-3 text-right">
                                             <div class="font-bold text-gray-900 dark:text-gray-100 text-base sm:text-lg mb-0.5" :class="{ 'text-gray-400 dark:text-gray-500': isStale(stock) }">{{ formatPrice(stock.Latest_Price) }}</div>
                                             
-                                            <div class="text-[10px] sm:hidden mt-1 flex justify-between">
+                                            <div class="text-[10px] sm:hidden mt-0.5">
                                                 <span @click.stop="setSort('Today_Return')" class="cursor-pointer underline" :class="stock.Today_Return >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'">{{ stock.Today_Return > 0 ? '+' : '' }}{{ stock.Today_Return }}%</span>
-                                                <span @click.stop="setSort('Return_5D')" class="cursor-pointer" :class="stock.Return_5D >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'">5日 {{ stock.Return_5D > 0 ? '+' : '' }}{{ stock.Return_5D }}%</span>
                                             </div>
 
                                             <div class="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">

@@ -208,8 +208,10 @@
                 </div>
 
                 <div class="bg-white dark:bg-gray-800 rounded shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden w-full max-w-full">
-                    <div class="p-3 sm:p-4 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 flex justify-between items-center">
+                    <div class="p-3 sm:p-4 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 flex justify-between items-center gap-2 flex-wrap">
                         <span class="font-bold text-gray-700 dark:text-gray-200 text-xs sm:text-sm">符合條件共 {{ sortedStocks.length }} 檔標的</span>
+                        <span v-if="isMarketOpen" class="text-xs sm:text-sm text-gray-500 dark:text-gray-400">報價活躍中: {{ activeCount }} 檔 / 沒在動: {{ staleCount }} 檔</span>
+                        <span v-else class="text-xs sm:text-sm text-gray-400 dark:text-gray-500">非交易時段</span>
                     </div>
                     
                     <div class="w-full max-w-full overflow-x-hidden">
@@ -486,9 +488,9 @@
                     showReturnFilters.value = true;
                     
                     // 統一使用「距離前高」(signed) 篩選，其他篩選 (days, return, price, industry) 保持原樣
-                    // 即將突破第一根: dist >= -5 ; 已突破第一根: dist >= 1 ; 持續突破: dist >= -3 (搭配其他條件)
+                    // 即將突破第一根: -5 <= dist <= 0 ; 已突破第一根: dist >= 1 ; 持續突破: dist >= -3 (搭配其他條件)
                     if (type === 'pending') { 
-                        filter.value.daysMin = 5; filter.value.returnMin = 10; filter.value.distanceMin = -5; 
+                        filter.value.daysMin = 5; filter.value.returnMin = 10; filter.value.distanceMin = -5; filter.value.distanceMax = 0; 
                     } else if (type === 'just_breakout') { 
                         filter.value.daysMin = 5; filter.value.returnMin = 10; filter.value.distanceMin = 1; 
                     } else if (type === 'continuous') { 
@@ -588,6 +590,13 @@
                     if (!ts) return false;
                     return (Date.now() - ts) > 60000;
                 };
+
+                const staleCount = computed(() => {
+                    return mergedStocks.value.filter(s => isStale(s)).length;
+                });
+                const activeCount = computed(() => {
+                    return mergedStocks.value.length - staleCount.value;
+                });
 
                 const toggleRow = (symbol) => {
                     if (expandedRow.value === symbol) { expandedRow.value = null; } 
@@ -710,7 +719,7 @@
                     indexYF, indexFugle,
                     sortKey, sortAsc, sortedStocks, setSort, resetFilters,
                     toggleRow, showReturnFilters, isDarkMode, toggleDarkMode,
-                    formatPrice, isStale
+                    formatPrice, isStale, activeCount, staleCount
                 };
             }
         }).mount('#app');

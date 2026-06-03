@@ -447,6 +447,56 @@
                 const sortAsc = ref(false); // 預設倒序 (大到小) 距前高
                 const userHasIndustryPref = ref(false);
 
+                const cleanRating = (r) => {
+                    if (!r) return '';
+                    // 移除「評分X.XX」數字，保留強力買進/買進/持有/賣出等文字
+                    return String(r).replace(/\s*評分[\d.]+/g, '').trim();
+                };
+
+                const saveUserPrefs = () => {
+                    try {
+                        const p = {
+                            sortKey: sortKey.value,
+                            sortAsc: sortAsc.value,
+                            filter: filter.value,
+                            filterFlags: filterFlags.value,
+                            selectedIndustries: selectedIndustries.value,
+                            showAdvancedFilters: showAdvancedFilters.value
+                        };
+                        localStorage.setItem('breakout_prefs', JSON.stringify(p));
+                    } catch (e) { /* ignore quota */ }
+                };
+
+                const loadUserPrefs = () => {
+                    try {
+                        const saved = localStorage.getItem('breakout_prefs');
+                        if (saved) {
+                            const p = JSON.parse(saved);
+                            if (p.sortKey) sortKey.value = p.sortKey;
+                            if (typeof p.sortAsc === 'boolean') sortAsc.value = p.sortAsc;
+                            if (p.filter && typeof p.filter === 'object') {
+                                filter.value = { ...filter.value, ...p.filter };
+                            }
+                            if (p.filterFlags && typeof p.filterFlags === 'object') {
+                                filterFlags.value = { ...filterFlags.value, ...p.filterFlags };
+                            }
+                            if (Array.isArray(p.selectedIndustries)) {
+                                selectedIndustries.value = p.selectedIndustries;
+                                userHasIndustryPref.value = true;
+                            }
+                            if (typeof p.showAdvancedFilters === 'boolean') {
+                                showAdvancedFilters.value = p.showAdvancedFilters;
+                            }
+                        } else {
+                            // 無記錄時預設倒序距前高
+                            sortAsc.value = false;
+                        }
+                    } catch (e) { /* ignore */ }
+                };
+
+                // 盡早載入使用者偏好，讓初始 sort/filter/產業選擇等使用本地記錄（或預設）
+                loadUserPrefs();
+
                 const formatPrice = (val) => {
                     if (val === null || val === undefined || val === '') return '';
                     const n = parseFloat(val);
@@ -462,7 +512,6 @@
                 };
 
                 onMounted(() => {
-                    loadUserPrefs();
                     if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
                         isDarkMode.value = true;
                         document.documentElement.classList.add('dark');
@@ -685,53 +734,6 @@
                     if (sortKey.value === key) sortAsc.value = !sortAsc.value;
                     else { sortKey.value = key; sortAsc.value = false; }
                     saveUserPrefs();
-                };
-
-                const cleanRating = (r) => {
-                    if (!r) return '';
-                    // 移除「評分X.XX」數字，保留強力買進/買進/持有/賣出等文字
-                    return String(r).replace(/\s*評分[\d.]+/g, '').trim();
-                };
-
-                const saveUserPrefs = () => {
-                    try {
-                        const p = {
-                            sortKey: sortKey.value,
-                            sortAsc: sortAsc.value,
-                            filter: filter.value,
-                            filterFlags: filterFlags.value,
-                            selectedIndustries: selectedIndustries.value,
-                            showAdvancedFilters: showAdvancedFilters.value
-                        };
-                        localStorage.setItem('breakout_prefs', JSON.stringify(p));
-                    } catch (e) { /* ignore quota */ }
-                };
-
-                const loadUserPrefs = () => {
-                    try {
-                        const saved = localStorage.getItem('breakout_prefs');
-                        if (saved) {
-                            const p = JSON.parse(saved);
-                            if (p.sortKey) sortKey.value = p.sortKey;
-                            if (typeof p.sortAsc === 'boolean') sortAsc.value = p.sortAsc;
-                            if (p.filter && typeof p.filter === 'object') {
-                                filter.value = { ...filter.value, ...p.filter };
-                            }
-                            if (p.filterFlags && typeof p.filterFlags === 'object') {
-                                filterFlags.value = { ...filterFlags.value, ...p.filterFlags };
-                            }
-                            if (Array.isArray(p.selectedIndustries)) {
-                                selectedIndustries.value = p.selectedIndustries;
-                                userHasIndustryPref.value = true;
-                            }
-                            if (typeof p.showAdvancedFilters === 'boolean') {
-                                showAdvancedFilters.value = p.showAdvancedFilters;
-                            }
-                        } else {
-                            // 無記錄時預設倒序距前高
-                            sortAsc.value = false;
-                        }
-                    } catch (e) { /* ignore */ }
                 };
 
                 const isDisposalStock = (stock) => {

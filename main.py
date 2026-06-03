@@ -574,6 +574,10 @@ class YFBackendEngine:
             print(f"❌ [錯誤] 上櫃清單 API 例外: {e}")
 
         print(f"✅ [完成] 總共解析出 {len(tickers)} 檔有效標的。\n")
+        # 修正 9105 產業代碼誤植 (TPEx 回傳 91)
+        for t in tickers:
+            if t.get("symbol") == "9105" and t.get("industry") in ("91", "未分類"):
+                t["industry"] = "其他電子業"
         return tickers
 
     def fetch_yfinance_rating(self, yf_symbol):

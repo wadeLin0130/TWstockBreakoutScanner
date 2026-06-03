@@ -595,9 +595,7 @@ class YFBackendEngine:
                 kstr = kmap.get(str(key).lower(), str(key))
                 if kstr and kstr != 'none':
                     parts.append(kstr)
-            mean = info.get('recommendationMean')
-            if mean is not None:
-                parts.append(f"評分{round(float(mean),2)}")
+            # 移除評分數字，只保留強力買進/買進/持有/賣出等文字樣式（避免混淆）
             if parts:
                 return " ".join(parts)
             # fallback to df

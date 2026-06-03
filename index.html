@@ -41,30 +41,12 @@
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
                     MARKET INDEX
                 </span>
-                <!-- 富果與 YF 大盤資料完全分開，各自獨立更新跳動，用來比較誰更準 -->
+                <!-- 大盤以富果(Fugle)為主，YF作為備援 -->
                 <div class="flex flex-wrap items-center gap-2">
-                    <!-- YF 獨立來源卡片 -->
-                    <div class="flex items-center gap-1.5 bg-slate-800 px-2 py-1 rounded shrink-0 border border-blue-900/40">
-                        <div class="flex flex-col">
-                            <span class="text-blue-400 text-[9px] font-bold tracking-wider leading-none">YF</span>
-                            <span class="font-mono text-sm sm:text-base font-bold leading-none mt-0.5" :class="indexYF.change > 0 ? 'text-red-500' : (indexYF.change < 0 ? 'text-green-500' : 'text-white')">
-                                {{ indexYF.price || '---' }}
-                            </span>
-                        </div>
-                        <div class="flex flex-col text-right leading-none">
-                            <span class="font-mono text-[10px] sm:text-xs font-medium" :class="indexYF.change > 0 ? 'text-red-500' : (indexYF.change < 0 ? 'text-green-500' : 'text-slate-400')">
-                                <span v-if="indexYF.change > 0">▲</span>
-                                <span v-else-if="indexYF.change < 0">▼</span>
-                                <span v-else>-</span>
-                                {{ indexYF.change > 0 ? '+' : ''}}{{ indexYF.change || '0' }} ({{ indexYF.changePct > 0 ? '+' : ''}}{{ indexYF.changePct || '0' }}%)
-                            </span>
-                            <span class="text-[8px] text-slate-500 font-mono">{{ indexYF.time || '--:--:--' }}</span>
-                        </div>
-                    </div>
-                    <!-- Fugle 獨立來源卡片 -->
+                    <!-- Fugle 主來源卡片 -->
                     <div class="flex items-center gap-1.5 bg-slate-800 px-2 py-1 rounded shrink-0 border border-orange-900/40">
                         <div class="flex flex-col">
-                            <span class="text-orange-400 text-[9px] font-bold tracking-wider leading-none">Fugle</span>
+                            <span class="text-orange-400 text-[9px] font-bold tracking-wider leading-none">Fugle 主</span>
                             <span class="font-mono text-sm sm:text-base font-bold leading-none mt-0.5" :class="indexFugle.change > 0 ? 'text-red-500' : (indexFugle.change < 0 ? 'text-green-500' : 'text-white')">
                                 {{ indexFugle.price || '---' }}
                             </span>
@@ -79,8 +61,26 @@
                             <span class="text-[8px] text-slate-500 font-mono">{{ indexFugle.time || '--:--:--' }}</span>
                         </div>
                     </div>
-                    <!-- 兩來源價差，方便直接看出誰領先/落後 -->
-                    <span v-if="indexYF.price && indexFugle.price" class="text-[10px] text-slate-400 font-mono ml-1">Δ {{ (indexYF.price - indexFugle.price) > 0 ? '+' : '' }}{{ (indexYF.price - indexFugle.price).toFixed(2) }}</span>
+                    <!-- YF 備援來源卡片 -->
+                    <div class="flex items-center gap-1.5 bg-slate-800 px-2 py-1 rounded shrink-0 border border-blue-900/40 opacity-80">
+                        <div class="flex flex-col">
+                            <span class="text-blue-400 text-[9px] font-bold tracking-wider leading-none">YF 備</span>
+                            <span class="font-mono text-sm sm:text-base font-bold leading-none mt-0.5" :class="indexYF.change > 0 ? 'text-red-500' : (indexYF.change < 0 ? 'text-green-500' : 'text-white')">
+                                {{ indexYF.price || '---' }}
+                            </span>
+                        </div>
+                        <div class="flex flex-col text-right leading-none">
+                            <span class="font-mono text-[10px] sm:text-xs font-medium" :class="indexYF.change > 0 ? 'text-red-500' : (indexYF.change < 0 ? 'text-green-500' : 'text-slate-400')">
+                                <span v-if="indexYF.change > 0">▲</span>
+                                <span v-else-if="indexYF.change < 0">▼</span>
+                                <span v-else>-</span>
+                                {{ indexYF.change > 0 ? '+' : ''}}{{ indexYF.change || '0' }} ({{ indexYF.changePct > 0 ? '+' : ''}}{{ indexYF.changePct || '0' }}%)
+                            </span>
+                            <span class="text-[8px] text-slate-500 font-mono">{{ indexYF.time || '--:--:--' }}</span>
+                        </div>
+                    </div>
+                    <!-- 價差 (Fugle 為主) -->
+                    <span v-if="indexYF.price && indexFugle.price" class="text-[10px] text-slate-400 font-mono ml-1">Δ {{ (indexFugle.price - indexYF.price) > 0 ? '+' : '' }}{{ (indexFugle.price - indexYF.price).toFixed(2) }}</span>
                 </div>
             </div>
             <div class="text-[11px] sm:text-xs text-slate-400 flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end sm:justify-start border-t border-slate-700 sm:border-t-0 pt-1 sm:pt-0 mt-1 sm:mt-0">
@@ -221,7 +221,7 @@
                     </div>
 
                     <div class="mt-4 pt-3 sm:pt-4 border-t border-gray-100 dark:border-gray-700 flex flex-wrap gap-3 items-center">
-                        <span class="text-xs font-bold text-gray-500 mr-1">籌碼與狀態：</span>
+                        <span class="text-xs font-bold text-gray-500 mr-1">籌碼與評級：</span>
                         <label class="flex items-center gap-1.5 cursor-pointer text-xs sm:text-sm text-gray-700 dark:text-gray-300 font-medium hover:text-blue-600 transition">
                             <input type="checkbox" v-model="filterFlags.disposition" class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300">
                             處置股
@@ -310,9 +310,9 @@
                                         <td class="p-3 text-right">
                                             <div class="font-bold text-gray-900 dark:text-gray-100 text-base sm:text-lg mb-0.5" :class="{ 'text-gray-400 dark:text-gray-500': isStale(stock) }">{{ formatPrice(stock.Latest_Price) }}</div>
                                             
-                                            <div class="text-[10px] sm:hidden mt-1 flex gap-x-2" :class="stock.Today_Return >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'">
-                                                <span @click.stop="setSort('Today_Return')" class="cursor-pointer underline">當日: {{ stock.Today_Return > 0 ? '+' : '' }}{{ stock.Today_Return }}%</span>
-                                                <span @click.stop="setSort('Return_5D')" class="cursor-pointer underline text-gray-500 dark:text-gray-400">5日: {{ stock.Return_5D > 0 ? '+' : '' }}{{ stock.Return_5D }}%</span>
+                                            <div class="text-[10px] sm:hidden mt-0.5 flex items-center gap-3">
+                                                <span @click.stop="setSort('Today_Return')" class="cursor-pointer underline" :class="stock.Today_Return >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'">{{ stock.Today_Return > 0 ? '+' : '' }}{{ stock.Today_Return }}%</span>
+                                                <span @click.stop="setSort('Return_5D')" class="cursor-pointer text-[9px]" :class="stock.Return_5D >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'">5日 {{ stock.Return_5D > 0 ? '+' : '' }}{{ stock.Return_5D }}%</span>
                                             </div>
 
                                             <div class="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">
@@ -348,16 +348,15 @@
                                                         <div class="text-sm text-blue-900 dark:text-blue-100 leading-relaxed">{{ stock.Company_Info || '分析生成中...' }}</div>
                                                     </div>
                                                     <div class="md:w-1/3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 p-3 rounded shrink-0">
-                                                        <div class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">籌碼與評級</div>
+                                                        <div class="flex justify-between items-start mb-1">
+                                                            <div class="text-xs font-bold text-gray-500 dark:text-gray-400">籌碼與評級</div>
+                                                            <button @click.stop="toggleRow(stock.Symbol)" class="text-xs text-gray-500 hover:text-gray-800 dark:hover:text-white font-medium border border-gray-300 dark:border-gray-600 px-1.5 py-0.5 rounded bg-white dark:bg-gray-700 shadow-sm shrink-0">關閉</button>
+                                                        </div>
                                                         <div class="text-sm text-gray-800 dark:text-gray-200 mb-1">{{ stock.Status_Tags || '-' }}</div>
-                                                        <div v-if="stock.Rating" class="text-xs font-bold text-purple-600 dark:text-purple-400">{{ stock.Rating }}</div>
+                                                        <div v-if="stock.Rating" class="text-xs font-bold text-purple-600 dark:text-purple-400">{{ cleanRating(stock.Rating) }}</div>
                                                     </div>
                                                 </div>
 
-                                                <div class="flex justify-between items-center bg-white dark:bg-gray-800 p-2 rounded">
-                                                    <h4 class="font-bold text-gray-800 dark:text-gray-200 text-xs sm:text-sm">近 60 日技術線圖 (單擊查看數據；縮放/移動僅用下方區間；拖移只會滾動列表)</h4>
-                                                    <button @click.stop="toggleRow(stock.Symbol)" class="text-xs text-gray-500 hover:text-gray-800 dark:hover:text-white font-medium border border-gray-300 dark:border-gray-600 px-2 py-1 rounded bg-white dark:bg-gray-700 shadow-sm shrink-0">關閉</button>
-                                                </div>
                                                 <div class="w-full bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700 p-1 relative">
                                                     <div :id="'chart-' + stock.Symbol" class="w-full h-[320px] sm:h-[400px]"></div>
                                                 </div>
@@ -424,7 +423,7 @@
                 const expandedRow = ref(null);
                 const isMarketOpen = ref(false); 
                 
-                // 獨立大盤來源：富果 / Fugle 與 YF /YF 各自寫入，獨立跳動比較誰更準
+                // 大盤以富果(Fugle)為主，YF作為備援；兩來源各自獨立更新跳動
                 const indexYF = ref({ price: 0, change: 0, changePct: 0, time: '' });
                 const indexFugle = ref({ price: 0, change: 0, changePct: 0, time: '' });
                 const showReturnFilters = ref(false);
@@ -445,7 +444,8 @@
 
                 const filterFlags = ref({ disposition: true, attention: true, rating: true, others: true });
                 const sortKey = ref('Distance_To_High');
-                const sortAsc = ref(true); 
+                const sortAsc = ref(false); // 預設倒序 (大到小) 距前高
+                const userHasIndustryPref = ref(false);
 
                 const formatPrice = (val) => {
                     if (val === null || val === undefined || val === '') return '';
@@ -462,6 +462,7 @@
                 };
 
                 onMounted(() => {
+                    loadUserPrefs();
                     if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
                         isDarkMode.value = true;
                         document.documentElement.classList.add('dark');
@@ -471,7 +472,7 @@
                         if (docSnap.exists()) isMarketOpen.value = docSnap.data().isMarketOpen;
                     });
 
-                    // 獨立監聽 YF 和 Fugle 大盤（各自路徑），讓兩個來源的更新完全獨立跳動（不共用 root）
+                    // 監聽 Fugle (主) 與 YF (備援) 大盤，各自獨立
                     onValue(rtdbRef(rtdb, "System/Index/YF"), (snapshot) => {
                         if (snapshot.exists()) indexYF.value = snapshot.val();
                     });
@@ -537,15 +538,24 @@
                     }
                 }, { deep: true });
 
+                // 使用者排序/篩選變更時，自動本地記錄（下次載入恢復）
+                watch(filter, saveUserPrefs, { deep: true });
+                watch(filterFlags, saveUserPrefs, { deep: true });
+                watch(selectedIndustries, saveUserPrefs, { deep: true });
+                watch(showAdvancedFilters, saveUserPrefs);
+
                 const resetFilters = () => {
                     filter.value = { daysMin: null, daysMax: null, todayReturnMin: null, todayReturnMax: null, returnMin: null, returnMax: null, return10dMin: null, return10dMax: null, return20dMin: null, return20dMax: null, distanceMin: null, distanceMax: null, priceMin: null, priceMax: null };
                     selectedIndustries.value = [];
+                    userHasIndustryPref.value = true;
                     filterFlags.value = { disposition: true, attention: true, rating: true, others: true };
+                    saveUserPrefs();
                 };
 
                 const applyQuickFilter = (type) => {
                     filter.value = { daysMin: null, daysMax: null, todayReturnMin: null, todayReturnMax: null, returnMin: null, returnMax: null, return10dMin: null, return10dMax: null, return20dMin: null, return20dMax: null, distanceMin: null, distanceMax: null, priceMin: null, priceMax: null };
                     selectedIndustries.value = [];
+                    userHasIndustryPref.value = true;
                     // do not auto expand return filters on quick filter click
                     // showReturnFilters.value = true;  // removed as per request
 
@@ -559,6 +569,7 @@
                     } else if (type === 'continuous') { 
                         filter.value.daysMax = 3; filter.value.returnMin = 5; filter.value.distanceMin = -3; 
                     } 
+                    saveUserPrefs();
                 };
 
                 const uniqueIndustries = computed(() => {
@@ -569,16 +580,20 @@
 
                 const selectAllIndustries = () => {
                     selectedIndustries.value = [...uniqueIndustries.value];
+                    userHasIndustryPref.value = true;
                     showIndustryPopup.value = false;
+                    saveUserPrefs();
                 };
                 const clearIndustries = () => {
                     selectedIndustries.value = [];
+                    userHasIndustryPref.value = true;
                     showIndustryPopup.value = false;
+                    saveUserPrefs();
                 };
 
                 // 初始載入資料後，預設全選產業（讓使用者看到所有，然後可取消勾選來篩選）
                 watch(uniqueIndustries, (inds) => {
-                    if (selectedIndustries.value.length === 0 && inds.length > 0) {
+                    if (selectedIndustries.value.length === 0 && inds.length > 0 && !userHasIndustryPref.value) {
                         selectedIndustries.value = [...inds];
                     }
                 }, { immediate: true });
@@ -669,6 +684,54 @@
                 const setSort = (key) => {
                     if (sortKey.value === key) sortAsc.value = !sortAsc.value;
                     else { sortKey.value = key; sortAsc.value = false; }
+                    saveUserPrefs();
+                };
+
+                const cleanRating = (r) => {
+                    if (!r) return '';
+                    // 移除「評分X.XX」數字，保留強力買進/買進/持有/賣出等文字
+                    return String(r).replace(/\s*評分[\d.]+/g, '').trim();
+                };
+
+                const saveUserPrefs = () => {
+                    try {
+                        const p = {
+                            sortKey: sortKey.value,
+                            sortAsc: sortAsc.value,
+                            filter: filter.value,
+                            filterFlags: filterFlags.value,
+                            selectedIndustries: selectedIndustries.value,
+                            showAdvancedFilters: showAdvancedFilters.value
+                        };
+                        localStorage.setItem('breakout_prefs', JSON.stringify(p));
+                    } catch (e) { /* ignore quota */ }
+                };
+
+                const loadUserPrefs = () => {
+                    try {
+                        const saved = localStorage.getItem('breakout_prefs');
+                        if (saved) {
+                            const p = JSON.parse(saved);
+                            if (p.sortKey) sortKey.value = p.sortKey;
+                            if (typeof p.sortAsc === 'boolean') sortAsc.value = p.sortAsc;
+                            if (p.filter && typeof p.filter === 'object') {
+                                filter.value = { ...filter.value, ...p.filter };
+                            }
+                            if (p.filterFlags && typeof p.filterFlags === 'object') {
+                                filterFlags.value = { ...filterFlags.value, ...p.filterFlags };
+                            }
+                            if (Array.isArray(p.selectedIndustries)) {
+                                selectedIndustries.value = p.selectedIndustries;
+                                userHasIndustryPref.value = true;
+                            }
+                            if (typeof p.showAdvancedFilters === 'boolean') {
+                                showAdvancedFilters.value = p.showAdvancedFilters;
+                            }
+                        } else {
+                            // 無記錄時預設倒序距前高
+                            sortAsc.value = false;
+                        }
+                    } catch (e) { /* ignore */ }
                 };
 
                 const isDisposalStock = (stock) => {
@@ -961,7 +1024,8 @@
                     toggleRow, showReturnFilters, isDarkMode, toggleDarkMode,
                     formatPrice, isStale, activeCount, staleCount, fiveMinStaleCount,
                     selectAllIndustries, clearIndustries, selectedIndustries, showAdvancedFilters,
-                    uniqueIndustries, showIndustryPopup, industrySelectionText
+                    uniqueIndustries, showIndustryPopup, industrySelectionText,
+                    cleanRating
                 };
             }
         }).mount('#app');

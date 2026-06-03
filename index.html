@@ -10,6 +10,27 @@
     </script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <style>
+        /* 1分鐘以上未更新時，強制所有文字變灰（包含原本有顏色的元素） */
+        tr.bg-gray-100.text-gray-400 .text-red-600,
+        tr.bg-gray-100.text-gray-400 .text-red-500,
+        tr.bg-gray-100.text-gray-400 .text-green-600,
+        tr.bg-gray-100.text-gray-400 .text-green-500,
+        tr.bg-gray-100.text-gray-400 .text-blue-600,
+        tr.bg-gray-100.text-gray-400 .text-gray-900,
+        tr.bg-gray-100.text-gray-400 .font-bold {
+            color: #9ca3af !important;
+        }
+        .dark tr.bg-gray-800.text-gray-500 .text-red-600,
+        .dark tr.bg-gray-800.text-gray-500 .text-red-500,
+        .dark tr.bg-gray-800.text-gray-500 .text-green-600,
+        .dark tr.bg-gray-800.text-gray-500 .text-green-500,
+        .dark tr.bg-gray-800.text-gray-500 .text-blue-600,
+        .dark tr.bg-gray-800.text-gray-500 .text-gray-900,
+        .dark tr.bg-gray-800.text-gray-500 .font-bold {
+            color: #6b7280 !important;
+        }
+    </style>
 </head>
 <body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans min-h-screen transition-colors duration-200 overflow-x-hidden w-full max-w-full">
     <div id="app" class="flex flex-col min-h-screen w-full max-w-full overflow-x-hidden">
@@ -131,11 +152,17 @@
                             </div>
                         </div>
                         <div class="flex flex-col">
-                            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1">產業</label>
-                            <select v-model="filter.industry" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none">
-                                <option value="">全部產業</option>
-                                <option v-for="ind in uniqueIndustries" :key="ind" :value="ind">{{ ind }}</option>
-                            </select>
+                            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1">產業 (多選)</label>
+                            <div class="flex gap-1 mb-1">
+                                <button @click="selectAllIndustries" class="text-[10px] px-1.5 py-0.5 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded">全選</button>
+                                <button @click="clearIndustries" class="text-[10px] px-1.5 py-0.5 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded">清空</button>
+                            </div>
+                            <div class="border border-gray-300 dark:border-gray-600 rounded p-1 max-h-20 overflow-auto text-xs grid grid-cols-2 sm:grid-cols-3 gap-x-1 gap-y-0.5">
+                                <label v-for="ind in uniqueIndustries" :key="ind" class="flex items-center gap-0.5 cursor-pointer truncate">
+                                    <input type="checkbox" :value="ind" v-model="filter.selectedIndustries" class="w-3 h-3 accent-blue-600">
+                                    <span class="truncate">{{ ind }}</span>
+                                </label>
+                            </div>
                         </div>
                     </div>
 
@@ -210,7 +237,7 @@
                 <div class="bg-white dark:bg-gray-800 rounded shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden w-full max-w-full">
                     <div class="p-3 sm:p-4 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 flex justify-between items-center gap-2 flex-wrap">
                         <span class="font-bold text-gray-700 dark:text-gray-200 text-xs sm:text-sm">符合條件共 {{ sortedStocks.length }} 檔標的</span>
-                        <span v-if="isMarketOpen" class="text-xs sm:text-sm text-gray-500 dark:text-gray-400">活躍中: {{ activeCount }} 檔，1分鐘未更新: {{ staleCount }} 檔</span>
+                        <span v-if="isMarketOpen" class="text-xs sm:text-sm text-gray-500 dark:text-gray-400">活躍中: {{ activeCount }} 檔，1分鐘未更新: {{ staleCount }} 檔，超過5分鐘未更新: {{ fiveMinStaleCount }} 檔</span>
                         <span v-else class="text-xs sm:text-sm text-gray-400 dark:text-gray-500">非交易時段</span>
                     </div>
                     
@@ -262,11 +289,11 @@
                                           'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500': isStale(stock)
                                         }">
                                         <td class="p-3">
-                                            <div class="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{{ stock.Industry }}</div>
-                                            <div class="font-bold text-blue-600 dark:text-blue-400">{{ stock.Symbol }} {{ stock.Name }}</div>
+                                            <div class="text-xs text-gray-500 dark:text-gray-400 mb-0.5" :class="{ 'text-gray-400 dark:text-gray-500': isStale(stock) }">{{ stock.Industry }}</div>
+                                            <div class="font-bold text-blue-600 dark:text-blue-400" :class="{ 'text-gray-400 dark:text-gray-500': isStale(stock) }">{{ stock.Symbol }} {{ stock.Name }}</div>
                                         </td>
                                         <td class="p-3 text-right">
-                                            <div class="font-bold text-gray-900 dark:text-gray-100 text-base sm:text-lg mb-0.5">{{ formatPrice(stock.Latest_Price) }}</div>
+                                            <div class="font-bold text-gray-900 dark:text-gray-100 text-base sm:text-lg mb-0.5" :class="{ 'text-gray-400 dark:text-gray-500': isStale(stock) }">{{ formatPrice(stock.Latest_Price) }}</div>
                                             
                                             <div class="text-[10px] sm:hidden mt-1 flex gap-x-2" :class="stock.Today_Return >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'">
                                                 <span @click.stop="setSort('Today_Return')" class="cursor-pointer underline">當日: {{ stock.Today_Return > 0 ? '+' : '' }}{{ stock.Today_Return }}%</span>
@@ -396,7 +423,7 @@
                     return20dMin: null, return20dMax: null,
                     distanceMin: null, distanceMax: null,
                     priceMin: null, priceMax: null,
-                    industry: ''
+                    selectedIndustries: []
                 });
 
                 const filterFlags = ref({ disposition: true, attention: true, rating: true, others: true });
@@ -483,12 +510,12 @@
                 }, { deep: true });
 
                 const resetFilters = () => {
-                    filter.value = { daysMin: null, daysMax: null, todayReturnMin: null, todayReturnMax: null, returnMin: null, returnMax: null, return10dMin: null, return10dMax: null, return20dMin: null, return20dMax: null, distanceMin: null, distanceMax: null, priceMin: null, priceMax: null, industry: '' };
+                    filter.value = { daysMin: null, daysMax: null, todayReturnMin: null, todayReturnMax: null, returnMin: null, returnMax: null, return10dMin: null, return10dMax: null, return20dMin: null, return20dMax: null, distanceMin: null, distanceMax: null, priceMin: null, priceMax: null, selectedIndustries: [] };
                     filterFlags.value = { disposition: true, attention: true, rating: true, others: true };
                 };
 
                 const applyQuickFilter = (type) => {
-                    filter.value = { daysMin: null, daysMax: null, todayReturnMin: null, todayReturnMax: null, returnMin: null, returnMax: null, return10dMin: null, return10dMax: null, return20dMin: null, return20dMax: null, distanceMin: null, distanceMax: null, priceMin: null, priceMax: null, industry: '' };
+                    filter.value = { daysMin: null, daysMax: null, todayReturnMin: null, todayReturnMax: null, returnMin: null, returnMax: null, return10dMin: null, return10dMax: null, return20dMin: null, return20dMax: null, distanceMin: null, distanceMax: null, priceMin: null, priceMax: null, selectedIndustries: [] };
                     showReturnFilters.value = true;
                     
                     // 統一使用「距離前高」(signed) 篩選，其他篩選 (days, return, price, industry) 保持原樣
@@ -507,6 +534,20 @@
                     mergedStocks.value.forEach(s => { if (s.Industry) set.add(s.Industry); });
                     return Array.from(set).sort();
                 });
+
+                const selectAllIndustries = () => {
+                    filter.value.selectedIndustries = [...uniqueIndustries.value];
+                };
+                const clearIndustries = () => {
+                    filter.value.selectedIndustries = [];
+                };
+
+                // 初始載入資料後，預設全選產業（讓使用者看到所有，然後可取消勾選來篩選）
+                watch(uniqueIndustries, (inds) => {
+                    if (filter.value.selectedIndustries.length === 0 && inds.length > 0) {
+                        filter.value.selectedIndustries = [...inds];
+                    }
+                }, { immediate: true });
 
                 const filteredStocks = computed(() => {
                     return mergedStocks.value.filter(stock => {
@@ -546,8 +587,9 @@
                         if (f.priceMin !== null && f.priceMin !== '' && basePrice < parseFloat(f.priceMin)) return false;
                         if (f.priceMax !== null && f.priceMax !== '' && basePrice > parseFloat(f.priceMax)) return false;
 
-                        // 產業篩選 (精確匹配)
-                        if (f.industry && stock.Industry !== f.industry) return false;
+                        // 產業篩選 (多選：勾選的才顯示；selected 為空則顯示全部)
+                        const selInds = f.selectedIndustries || [];
+                        if (selInds.length > 0 && !selInds.includes(stock.Industry)) return false;
 
                         // 統一用「距離前高」(signed) 篩選：正值表示已突破前高，負值表示還在下方
                         const isDistanceSet = (f.distanceMin !== null && f.distanceMin !== '') || (f.distanceMax !== null && f.distanceMax !== '');
@@ -587,9 +629,15 @@
                     else { sortKey.value = key; sortAsc.value = false; }
                 };
 
+                const isDisposalStock = (stock) => {
+                    return !!(stock.Status_Tags && String(stock.Status_Tags).includes('處置'));
+                };
+
                 // 盤中即時更新判斷：超過1分鐘 (60s) 沒有 lastUpdate 報價，整列灰色
+                // 處置股不變灰；收到報價即算更新（價格相同也算）
                 const isStale = (stock) => {
                     if (!isMarketOpen.value) return false;
+                    if (isDisposalStock(stock)) return false;
                     const ts = stock.lastUpdate;
                     if (!ts) return false;
                     return (Date.now() - ts) > 60000;
@@ -600,6 +648,16 @@
                 });
                 const activeCount = computed(() => {
                     return mergedStocks.value.length - staleCount.value;
+                });
+
+                const fiveMinStaleCount = computed(() => {
+                    if (!isMarketOpen.value) return 0;
+                    return mergedStocks.value.filter(s => {
+                        if (isDisposalStock(s)) return false;
+                        const ts = s.lastUpdate;
+                        if (!ts) return false;
+                        return (Date.now() - ts) > 300000; // 5 min
+                    }).length;
                 });
 
                 const toggleRow = (symbol) => {
@@ -723,7 +781,8 @@
                     indexYF, indexFugle,
                     sortKey, sortAsc, sortedStocks, setSort, resetFilters,
                     toggleRow, showReturnFilters, isDarkMode, toggleDarkMode,
-                    formatPrice, isStale, activeCount, staleCount
+                    formatPrice, isStale, activeCount, staleCount, fiveMinStaleCount,
+                    selectAllIndustries, clearIndustries
                 };
             }
         }).mount('#app');

@@ -20,18 +20,46 @@
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
                     MARKET INDEX
                 </span>
-                <div class="flex items-center gap-2 bg-slate-800 px-2 py-1 rounded shrink-0">
-                    <span class="text-slate-300 text-xs hidden sm:inline">加權指數</span>
-                    <span class="text-slate-300 text-xs sm:hidden">加權</span>
-                    <span class="font-mono text-sm sm:text-base font-bold" :class="indexData.change > 0 ? 'text-red-500' : (indexData.change < 0 ? 'text-green-500' : 'text-white')">
-                        {{ indexData.price || '---' }}
-                    </span>
-                    <span class="font-mono text-xs sm:text-sm font-medium flex items-center gap-1" :class="indexData.change > 0 ? 'text-red-500' : (indexData.change < 0 ? 'text-green-500' : 'text-slate-400')">
-                        <span v-if="indexData.change > 0">▲</span>
-                        <span v-else-if="indexData.change < 0">▼</span>
-                        <span v-else>-</span>
-                        {{ indexData.change > 0 ? '+' : ''}}{{ indexData.change || '0' }} ({{ indexData.changePct > 0 ? '+' : ''}}{{ indexData.changePct || '0' }}%)
-                    </span>
+                <!-- 富果與 YF 大盤資料完全分開，各自獨立更新跳動，用來比較誰更準 -->
+                <div class="flex flex-wrap items-center gap-2">
+                    <!-- YF 獨立來源卡片 -->
+                    <div class="flex items-center gap-1.5 bg-slate-800 px-2 py-1 rounded shrink-0 border border-blue-900/40">
+                        <div class="flex flex-col">
+                            <span class="text-blue-400 text-[9px] font-bold tracking-wider leading-none">YF</span>
+                            <span class="font-mono text-sm sm:text-base font-bold leading-none mt-0.5" :class="indexYF.change > 0 ? 'text-red-500' : (indexYF.change < 0 ? 'text-green-500' : 'text-white')">
+                                {{ indexYF.price || '---' }}
+                            </span>
+                        </div>
+                        <div class="flex flex-col text-right leading-none">
+                            <span class="font-mono text-[10px] sm:text-xs font-medium" :class="indexYF.change > 0 ? 'text-red-500' : (indexYF.change < 0 ? 'text-green-500' : 'text-slate-400')">
+                                <span v-if="indexYF.change > 0">▲</span>
+                                <span v-else-if="indexYF.change < 0">▼</span>
+                                <span v-else>-</span>
+                                {{ indexYF.change > 0 ? '+' : ''}}{{ indexYF.change || '0' }} ({{ indexYF.changePct > 0 ? '+' : ''}}{{ indexYF.changePct || '0' }}%)
+                            </span>
+                            <span class="text-[8px] text-slate-500 font-mono">{{ indexYF.time || '--:--:--' }}</span>
+                        </div>
+                    </div>
+                    <!-- Fugle 獨立來源卡片 -->
+                    <div class="flex items-center gap-1.5 bg-slate-800 px-2 py-1 rounded shrink-0 border border-orange-900/40">
+                        <div class="flex flex-col">
+                            <span class="text-orange-400 text-[9px] font-bold tracking-wider leading-none">Fugle</span>
+                            <span class="font-mono text-sm sm:text-base font-bold leading-none mt-0.5" :class="indexFugle.change > 0 ? 'text-red-500' : (indexFugle.change < 0 ? 'text-green-500' : 'text-white')">
+                                {{ indexFugle.price || '---' }}
+                            </span>
+                        </div>
+                        <div class="flex flex-col text-right leading-none">
+                            <span class="font-mono text-[10px] sm:text-xs font-medium" :class="indexFugle.change > 0 ? 'text-red-500' : (indexFugle.change < 0 ? 'text-green-500' : 'text-slate-400')">
+                                <span v-if="indexFugle.change > 0">▲</span>
+                                <span v-else-if="indexFugle.change < 0">▼</span>
+                                <span v-else>-</span>
+                                {{ indexFugle.change > 0 ? '+' : ''}}{{ indexFugle.change || '0' }} ({{ indexFugle.changePct > 0 ? '+' : ''}}{{ indexFugle.changePct || '0' }}%)
+                            </span>
+                            <span class="text-[8px] text-slate-500 font-mono">{{ indexFugle.time || '--:--:--' }}</span>
+                        </div>
+                    </div>
+                    <!-- 兩來源價差，方便直接看出誰領先/落後 -->
+                    <span v-if="indexYF.price && indexFugle.price" class="text-[10px] text-slate-400 font-mono ml-1">Δ {{ (indexYF.price - indexFugle.price) > 0 ? '+' : '' }}{{ (indexYF.price - indexFugle.price).toFixed(2) }}</span>
                 </div>
             </div>
             <div class="text-[11px] sm:text-xs text-slate-400 flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end sm:justify-start border-t border-slate-700 sm:border-t-0 pt-1 sm:pt-0 mt-1 sm:mt-0">
@@ -77,21 +105,13 @@
                         </div>
                     </div>
                     
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="flex flex-col">
                             <label class="text-xs text-gray-500 dark:text-gray-400 mb-1">距前高天數 (天)</label>
                             <div class="flex items-center space-x-1">
                                 <input type="number" v-model="filter.daysMin" placeholder="Min" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none">
                                 <span class="text-gray-400">-</span>
                                 <input type="number" v-model="filter.daysMax" placeholder="Max" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none">
-                            </div>
-                        </div>
-                        <div class="flex flex-col">
-                            <label class="text-xs text-gray-500 dark:text-gray-400 mb-1">已突破幅度 (%)</label>
-                            <div class="flex items-center space-x-1">
-                                <input type="number" v-model="filter.breakoutMin" placeholder="Min" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none">
-                                <span class="text-gray-400">-</span>
-                                <input type="number" v-model="filter.breakoutMax" placeholder="Max" class="w-full p-1.5 text-sm bg-transparent border border-gray-300 dark:border-gray-600 rounded focus:outline-none">
                             </div>
                         </div>
                         <div class="flex flex-col">
@@ -226,8 +246,7 @@
                                     <th class="p-3 text-right">
                                         <div class="flex flex-col items-end gap-1">
                                             <div class="text-xs font-normal">
-                                                <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Breakout_Margin')">已突破%</span> / 
-                                                <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Distance_To_High')">距前高</span>
+                                                <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Distance_To_High')" title="正值=已突破前高，負值=距前高下方；點擊排序">距前高 (+突破)</span>
                                             </div>
                                         </div>
                                     </th>
@@ -360,7 +379,9 @@
                 const expandedRow = ref(null);
                 const isMarketOpen = ref(false); 
                 
-                const indexData = ref({ price: 0, change: 0, changePct: 0, time: '' });
+                // 獨立大盤來源：富果 / Fugle 與 YF /YF 各自寫入，獨立跳動比較誰更準
+                const indexYF = ref({ price: 0, change: 0, changePct: 0, time: '' });
+                const indexFugle = ref({ price: 0, change: 0, changePct: 0, time: '' });
                 const showReturnFilters = ref(false);
                 const isDarkMode = ref(false);
                 
@@ -370,7 +391,6 @@
                     returnMin: null, returnMax: null,
                     return10dMin: null, return10dMax: null,
                     return20dMin: null, return20dMax: null,
-                    breakoutMin: null, breakoutMax: null,
                     distanceMin: null, distanceMax: null,
                     priceMin: null, priceMax: null,
                     industry: ''
@@ -404,8 +424,12 @@
                         if (docSnap.exists()) isMarketOpen.value = docSnap.data().isMarketOpen;
                     });
 
-                    onValue(rtdbRef(rtdb, "System/Index"), (snapshot) => {
-                        if (snapshot.exists()) indexData.value = snapshot.val();
+                    // 獨立監聽 YF 和 Fugle 大盤（各自路徑），讓兩個來源的更新完全獨立跳動（不共用 root）
+                    onValue(rtdbRef(rtdb, "System/Index/YF"), (snapshot) => {
+                        if (snapshot.exists()) indexYF.value = snapshot.val();
+                    });
+                    onValue(rtdbRef(rtdb, "System/Index/Fugle"), (snapshot) => {
+                        if (snapshot.exists()) indexFugle.value = snapshot.val();
                     });
 
                     onSnapshot(collection(db, "LiveStocks"), (snapshot) => {
@@ -453,16 +477,16 @@
                 }, { deep: true });
 
                 const resetFilters = () => {
-                    filter.value = { daysMin: null, daysMax: null, todayReturnMin: null, todayReturnMax: null, returnMin: null, returnMax: null, return10dMin: null, return10dMax: null, return20dMin: null, return20dMax: null, breakoutMin: null, breakoutMax: null, distanceMin: null, distanceMax: null, priceMin: null, priceMax: null, industry: '' };
+                    filter.value = { daysMin: null, daysMax: null, todayReturnMin: null, todayReturnMax: null, returnMin: null, returnMax: null, return10dMin: null, return10dMax: null, return20dMin: null, return20dMax: null, distanceMin: null, distanceMax: null, priceMin: null, priceMax: null, industry: '' };
                     filterFlags.value = { disposition: true, attention: true, rating: true, others: true };
                 };
 
                 const applyQuickFilter = (type) => {
-                    filter.value = { daysMin: null, daysMax: null, todayReturnMin: null, todayReturnMax: null, returnMin: null, returnMax: null, return10dMin: null, return10dMax: null, return20dMin: null, return20dMax: null, breakoutMin: null, breakoutMax: null, distanceMin: null, distanceMax: null, priceMin: null, priceMax: null, industry: '' };
+                    filter.value = { daysMin: null, daysMax: null, todayReturnMin: null, todayReturnMax: null, returnMin: null, returnMax: null, return10dMin: null, return10dMax: null, return20dMin: null, return20dMax: null, distanceMin: null, distanceMax: null, priceMin: null, priceMax: null, industry: '' };
                     showReturnFilters.value = true;
                     
-                    // 統一距離前高篩選 (使用新公式後的 signed 距離前高 % )
-                    // 其他篩選 (days, return 等) 保持原樣
+                    // 統一使用「距離前高」(signed) 篩選，其他篩選 (days, return, price, industry) 保持原樣
+                    // 即將突破第一根: dist >= -5 ; 已突破第一根: dist >= 1 ; 持續突破: dist >= -3 (搭配其他條件)
                     if (type === 'pending') { 
                         filter.value.daysMin = 5; filter.value.returnMin = 10; filter.value.distanceMin = -5; 
                     } else if (type === 'just_breakout') { 
@@ -518,15 +542,8 @@
 
                         // 產業篩選 (精確匹配)
                         if (f.industry && stock.Industry !== f.industry) return false;
-                        
-                        const isBreakoutSet = (f.breakoutMin !== null && f.breakoutMin !== '') || (f.breakoutMax !== null && f.breakoutMax !== '');
-                        if (isBreakoutSet) {
-                            const bm = stock.Breakout_Margin;
-                            if (bm == null || bm === '' || isNaN(Number(bm))) return false;
-                            if (f.breakoutMin !== null && f.breakoutMin !== '' && Number(bm) < parseFloat(f.breakoutMin)) return false;
-                            if (f.breakoutMax !== null && f.breakoutMax !== '' && Number(bm) > parseFloat(f.breakoutMax)) return false;
-                        }
 
+                        // 統一用「距離前高」(signed) 篩選：正值表示已突破前高，負值表示還在下方
                         const isDistanceSet = (f.distanceMin !== null && f.distanceMin !== '') || (f.distanceMax !== null && f.distanceMax !== '');
                         if (isDistanceSet) {
                             const dh = stock.Distance_To_High;
@@ -689,7 +706,8 @@
 
                 return {
                     mergedStocks, loading, expandedRow,
-                    filter, filterFlags, filteredStocks, applyQuickFilter, isMarketOpen, indexData,
+                    filter, filterFlags, filteredStocks, applyQuickFilter, isMarketOpen,
+                    indexYF, indexFugle,
                     sortKey, sortAsc, sortedStocks, setSort, resetFilters,
                     toggleRow, showReturnFilters, isDarkMode, toggleDarkMode,
                     formatPrice, isStale

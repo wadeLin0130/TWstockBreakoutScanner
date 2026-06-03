@@ -129,7 +129,7 @@ class YFBackendEngine:
         yf_symbols = list(self.yf_to_fugle.keys())
         index_symbol = "^TWII"
         
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] 啟動 YFinance 官方 WebSocket (股票分批 + Index) ... (stocks live to RTDB live_quotes + Index/YF)")
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 啟動 YFinance 官方 WebSocket (股票分批 + Index) ... (stocks live to RTDB live_quotes + Index/YF 獨立路徑，與 Fugle 各自跳動比較)")
         
         self.ws_lock = threading.Lock()
         self.rtdb_ws_buffer = {}
@@ -182,11 +182,9 @@ class YFBackendEngine:
                                 "time": datetime.now().strftime('%H:%M:%S'),
                                 "source": "yf"
                             }
-                            # 保留原本路徑給網頁相容
-                            rtdb.reference("System/Index").update(idx_data)
-                            # 另外寫 YF 專用路徑，方便跟 Fugle 比較
+                            # 只寫 YF 專用路徑，讓富果和YF各自獨立更新跳動，方便比較誰更準
                             rtdb.reference("System/Index/YF").update(idx_data)
-                            print(f"[YF WS Index] pushed @ {datetime.now().strftime('%H:%M:%S')}")
+                            print(f"[YF WS Index] pushed @ {datetime.now().strftime('%H:%M:%S')} price={idx_data.get('price')}")
                         except Exception as e: 
                             print(f"[YF WS Index] push error: {e}")
                     return
@@ -454,7 +452,7 @@ class YFBackendEngine:
         threading.Thread(target=fallback_loop, daemon=True).start()
 
     def start_fugle_index_websocket(self):
-        """【富果 WS 來源】大盤指數 (IX0001) - 用來跟 YF ^TWII 比較，寫到 System/Index/Fugle"""
+        """【富果 WS 來源】大盤指數 (IX0001) - 寫到 System/Index/Fugle 供與 YF 的 /Index/YF 各自獨立更新跳動比較誰更準"""
         if not HAS_WEBSOCKET or not self.fugle_headers or not FIREBASE_RTDB_URL:
             print("[Fugle Index WS] 跳過 (缺少 websocket 套件 或 無 FUGLE_API_KEY 或 無 FIREBASE_RTDB_URL)")
             return
@@ -501,9 +499,8 @@ class YFBackendEngine:
                                     "source": "fugle"
                                 }
                                 rtdb.reference("System/Index/Fugle").update(fugle_data)
-                                # also update main for frontend compatibility (YF not updating currently)
-                                rtdb.reference("System/Index").update(fugle_data)
-                                print(f"[Fugle Index WS] pushed @ {datetime.now().strftime('%H:%M:%S')}")
+                                # 僅寫獨立 /Fugle 路徑，與 YF 的 /YF 各自獨立更新跳動，前端分開顯示以比較誰更準（不再覆寫 root）
+                                print(f"[Fugle Index WS] pushed @ {datetime.now().strftime('%H:%M:%S')} price={fugle_data.get('price')}")
                             except Exception as e: 
                                 print(f"[Fugle Index WS] push error: {e}")
                             self.last_fugle_index_push_time = current_time
@@ -524,7 +521,7 @@ class YFBackendEngine:
             ws.run_forever(ping_interval=15, ping_timeout=10, sslopt={"cert_reqs": ssl.CERT_NONE})
 
         threading.Thread(target=run_ws, daemon=True).start()
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] 啟動 富果 Index WebSocket (IX0001) for 大盤比較 (寫到 System/Index/Fugle)")
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 啟動 富果 Index WebSocket (IX0001) for 大盤比較 (寫到 /Fugle 獨立路徑，與 YF /YF 各自跳動)")
 
     def check_is_market_open_today(self):
         now = datetime.now()
@@ -897,7 +894,7 @@ class YFBackendEngine:
 
     def run_auto_scheduler(self):
         print("\n=== 啟動全自動無人值守模式 (YFinance K線 + 富果少量meta + 雙大盤來源比較) ===")
-        print("邏輯原則：13:35 YF批次K線過濾 + 富果ticker(注意/處置/當沖, 1.05s pacing) + Gemini AI速寫；盤中同時啟 YF WS (stocks + Index/YF) 與 Fugle Index WS (Index/Fugle) 寫 RTDB 供比較")
+        print("邏輯原則：13:35 YF批次K線過濾 + 富果ticker(注意/處置/當沖, 1.05s pacing) + Gemini AI速寫；盤中同時啟 YF WS (stocks + Index/YF) 與 Fugle Index WS (Index/Fugle) 寫 RTDB 供比較 (兩來源獨立路徑，前端各自顯示跳動)")
         
         schedule_flags = {"1335": False}
 

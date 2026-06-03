@@ -340,7 +340,7 @@
                                                 </div>
 
                                                 <div class="flex justify-between items-center bg-white dark:bg-gray-800 p-2 rounded">
-                                                    <h4 class="font-bold text-gray-800 dark:text-gray-200 text-xs sm:text-sm">近 60 日技術線圖 (可滑動/縮放)</h4>
+                                                    <h4 class="font-bold text-gray-800 dark:text-gray-200 text-xs sm:text-sm">近 60 日技術線圖 (單擊查看數據；縮放/移動僅用下方區間；拖移只會滾動列表)</h4>
                                                     <button @click.stop="toggleRow(stock.Symbol)" class="text-xs text-gray-500 hover:text-gray-800 dark:hover:text-white font-medium border border-gray-300 dark:border-gray-600 px-2 py-1 rounded bg-white dark:bg-gray-700 shadow-sm shrink-0">關閉</button>
                                                 </div>
                                                 <div class="w-full bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700 p-1 relative">
@@ -700,8 +700,24 @@
                     if (!chartDom) return;
                     
                     let myChart = echarts.getInstanceByDom(chartDom);
-                    if (myChart) myChart.dispose();
-                    myChart = echarts.init(chartDom, isDarkMode.value ? 'dark' : null);
+                    const isFirstInit = !myChart;
+                    
+                    // 根據深色模式決定是否需要重新初始化（主題切換時）
+                    if (myChart) {
+                        const needsReinit = (isDarkMode.value && !myChart._dark) || (!isDarkMode.value && myChart._dark);
+                        if (needsReinit) {
+                            myChart.dispose();
+                            myChart = null;
+                        }
+                    }
+                    
+                    if (!myChart) {
+                        myChart = echarts.init(chartDom, isDarkMode.value ? 'dark' : null);
+                        myChart._dark = isDarkMode.value;
+                    }
+                    
+                    // 禁止 chart 區域的拖移/縮放手勢，讓拖移只會造成列表上下滑；僅 slider 控制縮放
+                    chartDom.style.touchAction = 'pan-y';
                     
                     const categoryData = klines.map(k => k.date);
                     const values = klines.map(k => [k.open, k.close, k.low, k.high]);
@@ -724,55 +740,106 @@
                         return result;
                     };
 
-                    const option = {
-                        backgroundColor: 'transparent',
-                        tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
-                        axisPointer: { link: { xAxisIndex: 'all' } },
-                        grid: [ 
-                            { left: '6%', right: '6%', top: '8%', height: '55%' }, 
-                            { left: '6%', right: '6%', top: '70%', height: '15%' } 
-                        ],
-                        xAxis: [ 
-                            { type: 'category', data: categoryData, boundaryGap: false, axisLine: { onZero: false }, splitLine: { show: false }, min: 'dataMin', max: 'dataMax' }, 
-                            { type: 'category', gridIndex: 1, data: categoryData, boundaryGap: false, axisLine: { onZero: false }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false }, min: 'dataMin', max: 'dataMax' } 
-                        ],
-                        yAxis: [ 
-                            { 
-                                scale: true, 
-                                splitArea: { show: true },
-                                min: function (value) { 
-                                    let diff = value.max - value.min;
-                                    if (diff === 0) diff = value.max * 0.01;
-                                    return Math.max(0, value.min - diff * 0.1).toFixed(2);
-                                },
-                                max: function (value) { 
-                                    let maxVal = Math.max(value.max, stock.Max_High || 0);
-                                    let diff = maxVal - value.min;
-                                    if (diff === 0) diff = maxVal * 0.01;
-                                    return (maxVal + diff * 0.1).toFixed(2);
-                                }
-                            }, 
-                            { scale: true, gridIndex: 1, splitNumber: 2, axisLabel: { show: false }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false } } 
-                        ],
-                        dataZoom: [
-                            { type: 'inside', xAxisIndex: [0, 1], startValue: Math.max(0, categoryData.length - 20), endValue: categoryData.length - 1 },
-                            { show: true, type: 'slider', xAxisIndex: [0, 1], top: '90%', startValue: Math.max(0, categoryData.length - 20), endValue: categoryData.length - 1, height: 20 }
-                        ],
-                        series: [ 
-                            { name: 'K線', type: 'candlestick', data: values, itemStyle: { color: '#dc2626', color0: '#16a34a', borderColor: '#dc2626', borderColor0: '#16a34a' }, markLine: { data: markLineData, animation: false } }, 
-                            { name: 'MA5', type: 'line', data: calculateMA(5), smooth: true, showSymbol: false, lineStyle: { color: '#3b82f6', width: 1.5, opacity: 0.8 } },
-                            { name: 'MA10', type: 'line', data: calculateMA(10), smooth: true, showSymbol: false, lineStyle: { color: '#d97706', width: 1.5, opacity: 0.8 } },
-                            { name: 'MA20', type: 'line', data: calculateMA(20), smooth: true, showSymbol: false, lineStyle: { color: '#7c3aed', width: 1.5, opacity: 0.8 } },
-                            { name: '成交量', type: 'bar', xAxisIndex: 1, yAxisIndex: 1, data: volumes } 
-                        ]
-                    };
+                    let chartOption;
+                    if (isFirstInit) {
+                        // 首次初始化：包含 dataZoom (僅 slider)，預設顯示最近約20%
+                        chartOption = {
+                            backgroundColor: 'transparent',
+                            tooltip: { trigger: 'axis', triggerOn: 'click', axisPointer: { type: 'cross' } },
+                            axisPointer: { link: { xAxisIndex: 'all' } },
+                            grid: [ 
+                                { left: '6%', right: '6%', top: '8%', height: '55%' }, 
+                                { left: '6%', right: '6%', top: '70%', height: '15%' } 
+                            ],
+                            xAxis: [ 
+                                { type: 'category', data: categoryData, boundaryGap: false, axisLine: { onZero: false }, splitLine: { show: false }, min: 'dataMin', max: 'dataMax' }, 
+                                { type: 'category', gridIndex: 1, data: categoryData, boundaryGap: false, axisLine: { onZero: false }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false }, min: 'dataMin', max: 'dataMax' } 
+                            ],
+                            yAxis: [ 
+                                { 
+                                    scale: true, 
+                                    splitArea: { show: true },
+                                    min: function (value) { 
+                                        let diff = value.max - value.min;
+                                        if (diff === 0) diff = value.max * 0.01;
+                                        return Math.max(0, value.min - diff * 0.1).toFixed(2);
+                                    },
+                                    max: function (value) { 
+                                        let maxVal = Math.max(value.max, stock.Max_High || 0);
+                                        let diff = maxVal - value.min;
+                                        if (diff === 0) diff = maxVal * 0.01;
+                                        return (maxVal + diff * 0.1).toFixed(2);
+                                    }
+                                }, 
+                                { scale: true, gridIndex: 1, splitNumber: 2, axisLabel: { show: false }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false } } 
+                            ],
+                            dataZoom: [
+                                // 僅保留 slider：盤面禁止拖移/縮放，只允許單擊查看數據；縮放移動用下方視窗
+                                { show: true, type: 'slider', xAxisIndex: [0, 1], top: '90%', start: 80, end: 100, height: 20 }
+                            ],
+                            series: [ 
+                                { name: 'K線', type: 'candlestick', data: values, itemStyle: { color: '#dc2626', color0: '#16a34a', borderColor: '#dc2626', borderColor0: '#16a34a' }, markLine: { data: markLineData, animation: false } }, 
+                                { name: 'MA5', type: 'line', data: calculateMA(5), smooth: true, showSymbol: false, lineStyle: { color: '#3b82f6', width: 1.5, opacity: 0.8 } },
+                                { name: 'MA10', type: 'line', data: calculateMA(10), smooth: true, showSymbol: false, lineStyle: { color: '#d97706', width: 1.5, opacity: 0.8 } },
+                                { name: 'MA20', type: 'line', data: calculateMA(20), smooth: true, showSymbol: false, lineStyle: { color: '#7c3aed', width: 1.5, opacity: 0.8 } },
+                                { name: '成交量', type: 'bar', xAxisIndex: 1, yAxisIndex: 1, data: volumes } 
+                            ]
+                        };
+                    } else {
+                        // 後續即時更新：只更新數據，不重設 dataZoom（避免跳回預設狀態）
+                        // 同時更新 yAxis 以反應可能的即時高低價變化
+                        chartOption = {
+                            xAxis: [ 
+                                { data: categoryData }, 
+                                { data: categoryData } 
+                            ],
+                            yAxis: [ 
+                                { 
+                                    scale: true, 
+                                    splitArea: { show: true },
+                                    min: function (value) { 
+                                        let diff = value.max - value.min;
+                                        if (diff === 0) diff = value.max * 0.01;
+                                        return Math.max(0, value.min - diff * 0.1).toFixed(2);
+                                    },
+                                    max: function (value) { 
+                                        let maxVal = Math.max(value.max, stock.Max_High || 0);
+                                        let diff = maxVal - value.min;
+                                        if (diff === 0) diff = maxVal * 0.01;
+                                        return (maxVal + diff * 0.1).toFixed(2);
+                                    }
+                                }, 
+                                { scale: true, gridIndex: 1, splitNumber: 2, axisLabel: { show: false }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false } } 
+                            ],
+                            series: [ 
+                                { data: values, markLine: { data: markLineData, animation: false } },
+                                { data: calculateMA(5) },
+                                { data: calculateMA(10) },
+                                { data: calculateMA(20) },
+                                { data: volumes } 
+                            ]
+                        };
+                    }
                     
-                    setTimeout(() => {
-                        myChart.setOption(option);
+                    myChart.setOption(chartOption);
+                    
+                    if (isFirstInit) {
+                        setTimeout(() => {
+                            myChart.resize();
+                        }, 50);
+                        
+                        // 只綁定一次 resize
+                        if (!chartDom._resizeListenerAdded) {
+                            chartDom._resizeListenerAdded = true;
+                            window.addEventListener('resize', () => {
+                                const inst = echarts.getInstanceByDom(chartDom);
+                                if (inst) inst.resize();
+                            });
+                        }
+                    } else {
+                        // 更新時也 resize 確保畫面正確
                         myChart.resize();
-                    }, 50);
-                    
-                    window.addEventListener('resize', () => myChart.resize());
+                    }
                 };
 
                 return {

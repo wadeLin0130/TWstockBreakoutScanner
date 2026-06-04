@@ -61,6 +61,7 @@ serviceAccountKey.json
 
 # Generated / large data (this project produces these at runtime)
 breakout_daily_list.csv
+breakout_list.json
 data_cache/
 debug/
 klines_*/

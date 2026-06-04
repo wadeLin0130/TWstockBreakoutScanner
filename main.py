@@ -873,6 +873,13 @@ class YFBackendEngine:
             breakout_list = self.generate_gemini_summaries(breakout_list)
 
             pd.DataFrame(breakout_list).to_csv(DAILY_LIST_FILE, index=False, encoding='utf-8-sig')
+            # 同時輸出 JSON 供前端用 http.server 直接 fetch 快速載入（避開 Firestore 大集合 snapshot 慢的問題）
+            try:
+                with open("breakout_list.json", "w", encoding="utf-8") as f:
+                    json.dump(breakout_list, f, ensure_ascii=False)
+                print(f"[系統] 已輸出 breakout_list.json ({len(breakout_list)} 檔)，前端可快速本地載入清單")
+            except Exception as e:
+                print(f"[警告] 輸出 breakout_list.json 失敗: {e}")
             self.reload_csv_to_memory()
             
             if self.db_firestore:
@@ -899,7 +906,7 @@ class YFBackendEngine:
 
     def run_auto_scheduler(self):
         print("\n=== 啟動全自動無人值守模式 (YFinance K線 + 富果少量meta + 雙大盤來源比較) ===")
-        print("邏輯原則：13:35 YF批次K線過濾 + 富果ticker(注意/處置/當沖, 1.05s pacing) + Gemini AI速寫；盤中同時啟 YF WS (stocks + Index/YF) 與 Fugle Index WS (Index/Fugle) 寫 RTDB 供比較 (兩來源獨立路徑，前端各自顯示跳動)")
+        print("邏輯原則：13:35 YF批次K線過濾 + 富果ticker(注意/處置/當沖, 1.05s pacing) + Gemini AI速寫；盤中(8:00起)同時啟 YF WS (stocks + Index/YF) 與 Fugle Index WS (Index/Fugle) 寫 RTDB 供比較 (兩來源獨立路徑，前端只顯示單一主來源)")
         
         schedule_flags = {"1335": False}
 
@@ -907,7 +914,7 @@ class YFBackendEngine:
             now = datetime.now()
             time_str = now.strftime("%H%M")
             
-            if self.check_is_market_open_today() and (900 <= int(time_str) <= 1330):
+            if self.check_is_market_open_today() and (800 <= int(time_str) <= 1330):
                 self.update_firebase_status(True)
                 
                 if not getattr(self, 'yf_ws_started', False):

@@ -41,46 +41,20 @@
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
                     MARKET INDEX
                 </span>
-                <!-- 大盤以富果(Fugle)為主，YF作為備援 -->
-                <div class="flex flex-wrap items-center gap-2">
-                    <!-- Fugle 主來源卡片 -->
-                    <div class="flex items-center gap-1.5 bg-slate-800 px-2 py-1 rounded shrink-0 border border-orange-900/40">
-                        <div class="flex flex-col">
-                            <span class="text-orange-400 text-[9px] font-bold tracking-wider leading-none">Fugle 主</span>
-                            <span class="font-mono text-sm sm:text-base font-bold leading-none mt-0.5" :class="indexFugle.change > 0 ? 'text-red-500' : (indexFugle.change < 0 ? 'text-green-500' : 'text-white')">
-                                {{ indexFugle.price || '---' }}
-                            </span>
-                        </div>
-                        <div class="flex flex-col text-right leading-none">
-                            <span class="font-mono text-[10px] sm:text-xs font-medium" :class="indexFugle.change > 0 ? 'text-red-500' : (indexFugle.change < 0 ? 'text-green-500' : 'text-slate-400')">
-                                <span v-if="indexFugle.change > 0">▲</span>
-                                <span v-else-if="indexFugle.change < 0">▼</span>
-                                <span v-else>-</span>
-                                {{ indexFugle.change > 0 ? '+' : ''}}{{ indexFugle.change || '0' }} ({{ indexFugle.changePct > 0 ? '+' : ''}}{{ indexFugle.changePct || '0' }}%)
-                            </span>
-                            <span class="text-[8px] text-slate-500 font-mono">{{ indexFugle.time || '--:--:--' }}</span>
-                        </div>
+                <!-- 單一大盤：優先 Fugle，斷線自動 fallback YF，只顯示一個數字，不顯示來源 -->
+                <div class="flex items-center gap-1.5 bg-slate-800 px-2.5 py-1 rounded shrink-0 border border-slate-700">
+                    <span class="font-mono text-base sm:text-lg font-bold leading-none" :class="marketIndex.change > 0 ? 'text-red-500' : (marketIndex.change < 0 ? 'text-green-500' : 'text-white')">
+                        {{ marketIndex.price || '---' }}
+                    </span>
+                    <div class="flex flex-col text-right leading-none">
+                        <span class="font-mono text-[10px] sm:text-xs font-medium" :class="marketIndex.change > 0 ? 'text-red-500' : (marketIndex.change < 0 ? 'text-green-500' : 'text-slate-400')">
+                            <span v-if="marketIndex.change > 0">▲</span>
+                            <span v-else-if="marketIndex.change < 0">▼</span>
+                            <span v-else>-</span>
+                            {{ marketIndex.change > 0 ? '+' : ''}}{{ marketIndex.change || '0' }} ({{ marketIndex.changePct > 0 ? '+' : ''}}{{ marketIndex.changePct || '0' }}%)
+                        </span>
+                        <span class="text-[8px] text-slate-500 font-mono">{{ marketIndex.time || '--:--:--' }}</span>
                     </div>
-                    <!-- YF 備援來源卡片 -->
-                    <div class="flex items-center gap-1.5 bg-slate-800 px-2 py-1 rounded shrink-0 border border-blue-900/40 opacity-80">
-                        <div class="flex flex-col">
-                            <span class="text-blue-400 text-[9px] font-bold tracking-wider leading-none">YF 備</span>
-                            <span class="font-mono text-sm sm:text-base font-bold leading-none mt-0.5" :class="indexYF.change > 0 ? 'text-red-500' : (indexYF.change < 0 ? 'text-green-500' : 'text-white')">
-                                {{ indexYF.price || '---' }}
-                            </span>
-                        </div>
-                        <div class="flex flex-col text-right leading-none">
-                            <span class="font-mono text-[10px] sm:text-xs font-medium" :class="indexYF.change > 0 ? 'text-red-500' : (indexYF.change < 0 ? 'text-green-500' : 'text-slate-400')">
-                                <span v-if="indexYF.change > 0">▲</span>
-                                <span v-else-if="indexYF.change < 0">▼</span>
-                                <span v-else>-</span>
-                                {{ indexYF.change > 0 ? '+' : ''}}{{ indexYF.change || '0' }} ({{ indexYF.changePct > 0 ? '+' : ''}}{{ indexYF.changePct || '0' }}%)
-                            </span>
-                            <span class="text-[8px] text-slate-500 font-mono">{{ indexYF.time || '--:--:--' }}</span>
-                        </div>
-                    </div>
-                    <!-- 價差 (Fugle 為主) -->
-                    <span v-if="indexYF.price && indexFugle.price" class="text-[10px] text-slate-400 font-mono ml-1">Δ {{ (indexFugle.price - indexYF.price) > 0 ? '+' : '' }}{{ (indexFugle.price - indexYF.price).toFixed(2) }}</span>
                 </div>
             </div>
             <div class="text-[11px] sm:text-xs text-slate-400 flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end sm:justify-start border-t border-slate-700 sm:border-t-0 pt-1 sm:pt-0 mt-1 sm:mt-0">
@@ -111,7 +85,7 @@
 
             <div v-if="loading" class="text-center py-20">
                 <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500 mx-auto"></div>
-                <p class="mt-4 text-gray-500 dark:text-gray-400 text-sm">正在載入混合雲端資料...</p>
+                <p class="mt-4 text-gray-500 dark:text-gray-400 text-sm">正在載入資料（本地清單優先，超快）...</p>
             </div>
 
             <div v-else-if="mergedStocks.length > 0" class="w-full max-w-full">
@@ -277,8 +251,9 @@
                                     <th class="p-3 text-right hidden sm:table-cell">
                                         <div class="flex flex-col items-end gap-1">
                                             <div class="text-xs font-normal text-gray-500">
-                                                <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Today_Return')">當日</span> |
-                                                <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white font-bold" @click="setSort('Return_5D')">5日</span>
+                                                <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Today_Return')">當日</span>
+                                                <span class="hidden md:inline text-gray-300 dark:text-gray-600">|</span>
+                                                <span class="hidden md:inline cursor-pointer hover:text-gray-900 dark:hover:text-white font-bold" @click="setSort('Return_5D')">5日</span>
                                             </div>
                                             <div class="text-xs font-normal text-gray-500">
                                                 <span class="cursor-pointer hover:text-gray-900 dark:hover:text-white" @click="setSort('Return_10D')">10日</span> |
@@ -321,8 +296,9 @@
                                         </td>
                                         <td class="p-3 text-right hidden sm:table-cell">
                                             <div class="text-xs mb-1">
-                                                <span class="text-gray-500 dark:text-gray-400">當日: </span><span :class="stock.Today_Return >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'" class="font-medium inline-block w-12">{{ stock.Today_Return > 0 ? '+' : '' }}{{ stock.Today_Return }}%</span> <span class="text-gray-300 dark:text-gray-600">|</span> 
-                                                <span class="text-gray-500 dark:text-gray-400">5日: </span><span :class="stock.Return_5D >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'" class="font-bold inline-block w-12">{{ stock.Return_5D > 0 ? '+' : '' }}{{ stock.Return_5D }}%</span>
+                                                <span class="text-gray-500 dark:text-gray-400">當日: </span><span :class="stock.Today_Return >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'" class="font-medium inline-block w-12">{{ stock.Today_Return > 0 ? '+' : '' }}{{ stock.Today_Return }}%</span>
+                                                <span class="hidden md:inline text-gray-300 dark:text-gray-600">|</span> 
+                                                <span class="hidden md:inline text-gray-500 dark:text-gray-400">5日: </span><span :class="stock.Return_5D >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'" class="hidden md:inline font-bold inline-block w-12">{{ stock.Return_5D > 0 ? '+' : '' }}{{ stock.Return_5D }}%</span>
                                             </div>
                                             <div class="text-xs">
                                                 <span class="text-gray-500 dark:text-gray-400">10日: </span><span :class="stock.Return_10D >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'" class="font-medium inline-block w-12">{{ stock.Return_10D > 0 ? '+' : '' }}{{ stock.Return_10D }}%</span> <span class="text-gray-300 dark:text-gray-600">|</span> 
@@ -422,9 +398,10 @@
                 const expandedRow = ref(null);
                 const isMarketOpen = ref(false); 
                 
-                // 大盤以富果(Fugle)為主，YF作為備援；兩來源各自獨立更新跳動
+                // 大盤以富果(Fugle)為主，斷線自動 fallback YF，只顯示單一乾淨數字（不顯示來源）
                 const indexYF = ref({ price: 0, change: 0, changePct: 0, time: '' });
                 const indexFugle = ref({ price: 0, change: 0, changePct: 0, time: '' });
+                const indexLastTs = ref({ fugle: 0, yf: 0 });  // 用來判斷哪個來源更新較新/是否斷線
                 const showReturnFilters = ref(false);
                 const isDarkMode = ref(false);
                 const selectedIndustries = ref([]);
@@ -510,39 +487,29 @@
                     if (expandedRow.value) renderChart(expandedRow.value);
                 };
 
-                onMounted(() => {
+                onMounted(async () => {
                     if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
                         isDarkMode.value = true;
                         document.documentElement.classList.add('dark');
                     }
 
+                    // 永遠先掛小而快的 listeners（Status + 大盤 + live quotes）
                     onSnapshot(doc(db, "System", "Status"), (docSnap) => {
                         if (docSnap.exists()) isMarketOpen.value = docSnap.data().isMarketOpen;
                     });
 
-                    // 監聽 Fugle (主) 與 YF (備援) 大盤，各自獨立
+                    // 監聽大盤：優先 Fugle，自動 fallback YF（只顯示單一來源，不顯示來源標籤）
                     onValue(rtdbRef(rtdb, "System/Index/YF"), (snapshot) => {
-                        if (snapshot.exists()) indexYF.value = snapshot.val();
+                        if (snapshot.exists()) {
+                            indexYF.value = snapshot.val();
+                            indexLastTs.value.yf = Date.now();
+                        }
                     });
                     onValue(rtdbRef(rtdb, "System/Index/Fugle"), (snapshot) => {
-                        if (snapshot.exists()) indexFugle.value = snapshot.val();
-                    });
-
-                    onSnapshot(collection(db, "LiveStocks"), (snapshot) => {
-                        const newStocks = [];
-                        snapshot.forEach((doc) => {
-                            let data = doc.data();
-                            let indCode = String(data.Industry).padStart(2, '0');
-                            data.Industry = INDUSTRY_MAPPING[indCode] || data.Industry;
-                            if (data.Symbol === '9105') {
-                                data.Industry = '其他電子業';
-                            }
-                            newStocks.push(data);
-                        });
-                        baseStocks.value = newStocks;
-                        loading.value = false;
-                    }, (error) => {
-                        console.error("Firestore 連線錯誤:", error);
+                        if (snapshot.exists()) {
+                            indexFugle.value = snapshot.val();
+                            indexLastTs.value.fugle = Date.now();
+                        }
                     });
 
                     onValue(rtdbRef(rtdb, "live_quotes"), (snapshot) => {
@@ -555,9 +522,57 @@
                         console.error("RTDB 連線錯誤:", error);
                     });
 
+                    // === 關鍵優化：清單優先從本地 breakout_list.json 載入（同一台 http.server 超快），避免 Firestore 496 筆重 document + Klines 造成初始載入慢 ===
+                    // 只有本地拿不到時才 fallback 走 Firestore onSnapshot（payload 大很多）
+                    let localLoaded = false;
+                    try {
+                        const res = await fetch('./breakout_list.json', { cache: 'no-store' });
+                        if (res.ok) {
+                            let data = await res.json();
+                            if (Array.isArray(data) && data.length > 0) {
+                                // 套用產業中文對應（跟原本 snapshot 邏輯一致）
+                                data = data.map(stock => {
+                                    let indCode = String(stock.Industry || '').padStart(2, '0');
+                                    stock.Industry = INDUSTRY_MAPPING[indCode] || stock.Industry || '未分類';
+                                    if (stock.Symbol === '9105') {
+                                        stock.Industry = '其他電子業';
+                                    }
+                                    return stock;
+                                });
+                                baseStocks.value = data;
+                                loading.value = false;
+                                localLoaded = true;
+                                console.log(`[本地載入] 從 breakout_list.json 快速載入 ${data.length} 檔清單（避開 Firestore 大 snapshot）`);
+                            }
+                        }
+                    } catch (e) {
+                        console.log('[本地載入] 無 breakout_list.json 或 fetch 失敗，fallback Firebase');
+                    }
+
+                    if (!localLoaded) {
+                        // 舊路徑：只有在沒有本地 json 時才走，會比較慢（尤其是首次）
+                        onSnapshot(collection(db, "LiveStocks"), (snapshot) => {
+                            const newStocks = [];
+                            snapshot.forEach((doc) => {
+                                let data = doc.data();
+                                let indCode = String(data.Industry).padStart(2, '0');
+                                data.Industry = INDUSTRY_MAPPING[indCode] || data.Industry;
+                                if (data.Symbol === '9105') {
+                                    data.Industry = '其他電子業';
+                                }
+                                newStocks.push(data);
+                            });
+                            baseStocks.value = newStocks;
+                            loading.value = false;
+                        }, (error) => {
+                            console.error("Firestore 連線錯誤:", error);
+                        });
+                    }
                 });
 
-                // 最單純的合併，fs 優先 + rtdb 附加；並用「現有 K線圖」邏輯 override 前高/漲幅（最新 bar 不算入前高）
+                // 單純合併：base（本地 json 優先或 FS） + rtdb live_quotes 即時覆蓋。
+                // 後端 seed / 即時 tick 已用完整歷史計算好權威的 Max_High（前高從最新收盤 bar 之前）、及用最新價格更新的各漲幅 / 距離。
+                // 前端不再用 eff 覆蓋這些數字（避免 truncated klines 或把最新 bar 算進前高導致「跑到今天」）。
                 const mergedStocks = computed(() => {
                     return baseStocks.value.map(stock => {
                         const liveData = rtdbQuotes.value[stock.Symbol];
@@ -565,16 +580,6 @@
                         if (liveData) {
                             merged = { ...stock, ...liveData };
                         }
-                        // 統一用 effective 計算（fs 優先畫圖，rtdb 附加；前高永遠從 chartKlines 倒數第二起算）
-                        const eff = getEffectiveChartKlinesAndPreMetrics(stock.Klines, liveData, isMarketOpen.value);
-                        merged.Max_High = eff.maxHigh;
-                        merged.Days_Since_High = eff.daysSinceHigh;
-                        merged.Distance_To_High = eff.distanceToHigh;
-                        merged.Breakout_Margin = (eff.distanceToHigh > 0 ? eff.distanceToHigh : null);
-                        merged.Today_Return = eff.todayReturn;
-                        merged.Return_5D = eff.return5D;
-                        merged.Return_10D = eff.return10D;
-                        merged.Return_20D = eff.return20D;
                         return merged;
                     });
                 });
@@ -652,6 +657,22 @@
                     if (sel === 0) return '全部產業';
                     if (sel === tot) return '全部產業';
                     return `已選 ${sel}/${tot} 產業`;
+                });
+
+                // 單一大盤顯示：優先 Fugle，Fugle 超過 2 分鐘沒更新則自動切 YF，只顯示一個數字，不標來源
+                const marketIndex = computed(() => {
+                    const f = indexFugle.value || {};
+                    const y = indexYF.value || {};
+                    const now = Date.now();
+                    const fugleAge = now - (indexLastTs.value.fugle || 0);
+                    if (f.price && fugleAge < 120 * 1000) {
+                        return { price: f.price, change: f.change || 0, changePct: f.changePct || 0, time: f.time || '' };
+                    }
+                    if (y.price) {
+                        return { price: y.price, change: y.change || 0, changePct: y.changePct || 0, time: y.time || '' };
+                    }
+                    // 兩個都還沒來或都舊，就顯示 Fugle（或空）
+                    return { price: f.price || y.price || '---', change: f.change || y.change || 0, changePct: f.changePct || y.changePct || 0, time: f.time || y.time || '' };
                 });
 
                 const filteredStocks = computed(() => {
@@ -766,8 +787,8 @@
                     }).length;
                 });
 
-                // 共享 helper：依 fs/rtdb 規則決定「畫圖用」的 K線陣列（chartKlines）
-                // 並從該陣列計算「前高系列」（永遠排除最新 bar）
+                // 僅負責決定「畫圖用」的 K 線陣列（是否 append 當日即時 bar）
+                // 其他前高/漲幅數字改由後端權威提供（完整歷史 pre-high + 用最新價格更新的漲幅），前端 merge 直接使用，不再 client 端重算避免 truncated klines 或把最新 bar 誤算進前高。
                 function getEffectiveChartKlinesAndPreMetrics(baseKlinesRaw, liveData, isMarket) {
                     let baseKlines = [];
                     if (typeof baseKlinesRaw === 'string') {
@@ -776,7 +797,6 @@
                         baseKlines = baseKlinesRaw;
                     }
                     let chartKlines = baseKlines;
-                    let currentCloseForMetrics = (baseKlines.length ? baseKlines[baseKlines.length-1].close : 0);
                     if (isMarket && liveData && liveData.Latest_Price) {
                         const todayDate = new Date();
                         const mm = String(todayDate.getMonth() + 1).padStart(2, '0');
@@ -790,11 +810,10 @@
                             high: parseFloat(liveData.Today_High || liveData.Latest_Price) || 0,
                             volume: parseInt(liveData.Today_Volume || 0)
                         };
-                        currentCloseForMetrics = liveCandle.close;
                         if (baseKlines.length > 0) {
                             const lastBaseDay = (baseKlines[baseKlines.length-1].date || '').split(' ')[0];
                             if (lastBaseDay === todayStr) {
-                                chartKlines = baseKlines;  // 同一天，用 fs 畫圖
+                                chartKlines = baseKlines;
                             } else {
                                 chartKlines = [...baseKlines, liveCandle];
                             }
@@ -802,55 +821,7 @@
                             chartKlines = [liveCandle];
                         }
                     }
-                    // 從「現有 chartKlines」計算前高（倒數第二根起算，最新不要算）
-                    let maxH = 0, daysS = 0, dist = 0;
-                    if (chartKlines.length > 1) {
-                        const preK = chartKlines.slice(0, -1);
-                        const phs = preK.map(k => k.high || 0);
-                        const mhv = Math.max(...phs);
-                        maxH = Math.round(mhv * 100) / 100;
-                        let ridx = 0;
-                        for (let i=preK.length-1; i>=0; i--) {
-                            if (Math.abs((preK[i].high||0) - mhv) < 0.001) { ridx = i; break; }
-                        }
-                        daysS = preK.length - 1 - ridx;
-                        const lclose = currentCloseForMetrics || (chartKlines[chartKlines.length-1].close || 0);
-                        if (maxH > 0 && lclose > 0) {
-                            const den = Math.min(lclose, maxH);
-                            dist = Math.round( (lclose - maxH) / den * 100 * 100 ) / 100;
-                        }
-                    } else if (chartKlines.length === 1) {
-                        maxH = chartKlines[0].high || 0;
-                    }
-                    // 同時計算漲幅（一樣邏輯，用 chartKlines 的倒數第二作為 base）
-                    let tR = 0, r5=0, r10=0, r20=0;
-                    const lclose = currentCloseForMetrics || (chartKlines.length ? chartKlines[chartKlines.length-1].close : 0);
-                    if (chartKlines.length > 1) {
-                        const pclose = chartKlines[chartKlines.length-2].close || 0;
-                        tR = pclose > 0 ? Math.round( (lclose - pclose) / pclose * 100 * 100 ) / 100 : 0;
-                    }
-                    if (chartKlines.length > 5) {
-                        const b5 = chartKlines[chartKlines.length-6].close || 0;
-                        r5 = b5 > 0 ? Math.round( (lclose - b5) / b5 * 100 * 100 ) / 100 : 0;
-                    }
-                    if (chartKlines.length > 10) {
-                        const b10 = chartKlines[chartKlines.length-11].close || 0;
-                        r10 = b10 > 0 ? Math.round( (lclose - b10) / b10 * 100 * 100 ) / 100 : 0;
-                    }
-                    if (chartKlines.length > 20) {
-                        const b20 = chartKlines[chartKlines.length-21].close || 0;
-                        r20 = b20 > 0 ? Math.round( (lclose - b20) / b20 * 100 * 100 ) / 100 : 0;
-                    }
-                    return {
-                        chartKlines,
-                        maxHigh: maxH,
-                        daysSinceHigh: daysS,
-                        distanceToHigh: dist,
-                        todayReturn: tR,
-                        return5D: r5,
-                        return10D: r10,
-                        return20D: r20
-                    };
+                    return { chartKlines };
                 }
 
                 const toggleRow = (symbol) => {
@@ -866,9 +837,8 @@
                     const liveD = rtdbQuotes.value[symbol];
                     const eff = getEffectiveChartKlinesAndPreMetrics(baseKlinesRaw, liveD, isMarketOpen.value);
                     const chartKlines = eff.chartKlines;
-                    const computedMaxHigh = eff.maxHigh;
-                    const computedDaysSince = eff.daysSinceHigh;
-                    const computedDist = eff.distanceToHigh;
+                    // 直接用 stock 裡的權威 Max_High（後端 batch/seed 用完整歷史 + 從最新收盤 bar 之前算好）
+                    const computedMaxHigh = stock.Max_High || 0;
                     let livePriceForCalc = (liveD && liveD.Latest_Price) ? liveD.Latest_Price : (chartKlines.length ? chartKlines[chartKlines.length-1].close : stock.Latest_Price);
 
                     const chartDom = document.getElementById('chart-' + symbol);
@@ -1020,7 +990,8 @@
                 return {
                     mergedStocks, loading, expandedRow,
                     filter, filterFlags, filteredStocks, applyQuickFilter, isMarketOpen,
-                    indexYF, indexFugle,
+                    marketIndex,  // 單一乾淨大盤（優先 Fugle + 自動 fallback）
+                    indexYF, indexFugle,  // 保留原始以便除錯
                     sortKey, sortAsc, sortedStocks, setSort, resetFilters,
                     toggleRow, showReturnFilters, isDarkMode, toggleDarkMode,
                     formatPrice, isStale, activeCount, staleCount, fiveMinStaleCount,

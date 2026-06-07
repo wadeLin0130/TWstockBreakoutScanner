@@ -392,16 +392,21 @@
 
         createApp({
             setup() {
-                const baseStocks = ref([]); 
-                const rtdbQuotes = ref({}); 
+                const baseStocks = ref([]);
+                const rtdbQuotes = ref({});
                 const loading = ref(true);
                 const expandedRow = ref(null);
-                const isMarketOpen = ref(false); 
-                
-                // 大盤以富果(Fugle)為主，斷線自動 fallback YF，只顯示單一乾淨數字（不顯示來源）
+                // 從 RTDB market_state 讀取市場狀態（後端狀態機：WEEKEND/PRE_MARKET/INTRADAY/POST_MARKET）
+                const marketState = ref({ state: 'PRE_MARKET', is_open: false, date: '' });
+
+                // 大盤以富果(Fugle)為主，斷線自動 fallback YF
                 const indexYF = ref({ price: 0, change: 0, changePct: 0, time: '' });
                 const indexFugle = ref({ price: 0, change: 0, changePct: 0, time: '' });
-                const indexLastTs = ref({ fugle: 0, yf: 0 });  // 用來判斷哪個來源更新較新/是否斷線
+                const indexLastTs = ref({ fugle: 0, yf: 0 });
+
+                // INTRADAY = 富果 quote lastUpdated 確認市場有跳動（後端狀態機決定）
+                const isMarketOpen = computed(() => marketState.value.state === 'INTRADAY');
+
                 const showReturnFilters = ref(false);
                 const isDarkMode = ref(false);
                 const selectedIndustries = ref([]);
@@ -493,22 +498,16 @@
                         document.documentElement.classList.add('dark');
                     }
 
-                    // 永遠先掛小而快的 listeners（Status + 大盤 + live quotes）
-                    onSnapshot(doc(db, "System", "Status"), (docSnap) => {
-                        if (docSnap.exists()) isMarketOpen.value = docSnap.data().isMarketOpen;
-                    });
-
-                    // 監聽大盤：優先 Fugle，自動 fallback YF（只顯示單一來源，不顯示來源標籤）
-                    onValue(rtdbRef(rtdb, "System/Index/YF"), (snapshot) => {
+                    // 監聽 market_state（取代舊 Firestore System/Status，含市場狀態機 + 大盤指數）
+                    onValue(rtdbRef(rtdb, "market_state"), (snapshot) => {
                         if (snapshot.exists()) {
-                            indexYF.value = snapshot.val();
-                            indexLastTs.value.yf = Date.now();
-                        }
-                    });
-                    onValue(rtdbRef(rtdb, "System/Index/Fugle"), (snapshot) => {
-                        if (snapshot.exists()) {
-                            indexFugle.value = snapshot.val();
-                            indexLastTs.value.fugle = Date.now();
+                            const ms = snapshot.val();
+                            marketState.value = ms;
+                            // 大盤指數（YF / Fugle）從 market_state/index 讀取
+                            if (ms.index) {
+                                if (ms.index.YF) { indexYF.value = ms.index.YF; indexLastTs.value.yf = Date.now(); }
+                                if (ms.index.Fugle) { indexFugle.value = ms.index.Fugle; indexLastTs.value.fugle = Date.now(); }
+                            }
                         }
                     });
 
@@ -570,17 +569,47 @@
                     }
                 });
 
-                // 單純合併：base（本地 json 優先或 FS） + rtdb live_quotes 即時覆蓋。
-                // 後端 seed / 即時 tick 已用完整歷史計算好權威的 Max_High（前高從最新收盤 bar 之前）、及用最新價格更新的各漲幅 / 距離。
-                // 前端不再用 eff 覆蓋這些數字（避免 truncated klines 或把最新 bar 算進前高導致「跑到今天」）。
+                // 選擇性 merge：Firestore 靜態歷史欄位不被 RTDB 覆蓋；只覆蓋確實屬於盤中即時的欄位。
+                // Returns / Distance 在 client-side 從 liveData.price + Firestore 基準值計算，避免 RTDB 推送過多欄位。
                 const mergedStocks = computed(() => {
+                    const isIntraday = isMarketOpen.value;
                     return baseStocks.value.map(stock => {
                         const liveData = rtdbQuotes.value[stock.Symbol];
-                        let merged = stock;
-                        if (liveData) {
-                            merged = { ...stock, ...liveData };
-                        }
-                        return merged;
+                        const livePrice = liveData && liveData.price > 0 ? liveData.price : null;
+                        if (!livePrice) return stock;
+
+                        // 計算基準（新舊欄位向下相容）
+                        const yestClose = parseFloat(stock.Yesterday_Close || stock.Latest_Price || livePrice);
+                        const base5d    = parseFloat(stock.Base_5D  || livePrice);
+                        const base10d   = parseFloat(stock.Base_10D || livePrice);
+                        const base20d   = parseFloat(stock.Base_20D || livePrice);
+                        // 前高基準：盤中 = Effective（含昨天），非盤中 = Historical（不含昨天）
+                        const maxHighRef = isIntraday
+                            ? parseFloat(stock.Effective_Max_High || stock.Max_High || livePrice)
+                            : parseFloat(stock.Max_High || stock.Historical_Max_High || livePrice);
+
+                        const calcRet = (p, base) => base > 0 ? +((p - base) / base * 100).toFixed(2) : 0;
+                        const denom   = maxHighRef > 0 ? Math.min(livePrice, maxHighRef) : 1;
+                        const rawDist = maxHighRef > 0 ? (livePrice - maxHighRef) / denom * 100 : 0;
+
+                        return {
+                            ...stock,
+                            // 即時價格（覆蓋 Firestore 的昨日收盤）
+                            Latest_Price: livePrice,
+                            // 盤中 OHLCV（null = 尚無開盤資料，前端顯示 '-'）
+                            Today_Open:   liveData.today_open   || null,
+                            Today_High:   liveData.today_high   || null,
+                            Today_Low:    liveData.today_low    || null,
+                            Today_Volume: liveData.today_volume || 0,
+                            // 漲幅（client-side 計算）
+                            Today_Return: calcRet(livePrice, yestClose),
+                            Return_5D:    calcRet(livePrice, base5d),
+                            Return_10D:   calcRet(livePrice, base10d),
+                            Return_20D:   calcRet(livePrice, base20d),
+                            // 距前高（基準：盤中=Effective，非盤中=Historical）
+                            Distance_To_High: +rawDist.toFixed(2),
+                            Breakout_Margin:  rawDist >= 0 ? +rawDist.toFixed(2) : null,
+                        };
                     });
                 });
 
@@ -787,41 +816,53 @@
                     }).length;
                 });
 
-                // 僅負責決定「畫圖用」的 K 線陣列（是否 append 當日即時 bar）
-                // 其他前高/漲幅數字改由後端權威提供（完整歷史 pre-high + 用最新價格更新的漲幅），前端 merge 直接使用，不再 client 端重算避免 truncated klines 或把最新 bar 誤算進前高。
-                function getEffectiveChartKlinesAndPreMetrics(baseKlinesRaw, liveData, isMarket) {
+                // 依市場狀態組合圖表 K 線：
+                //   PRE_MARKET  → 只顯示歷史 Klines（不含昨天，避免昨天被誤當前高）
+                //   INTRADAY    → 歷史 Klines + Yesterday_Bar + 今日即時 bar
+                //   POST_MARKET → 歷史 Klines + Yesterday_Bar（昨天完整 bar，無即時）
+                function getEffectiveChartKlinesAndPreMetrics(stock, liveData, state) {
+                    // 解析歷史 Klines（不含昨天）
                     let baseKlines = [];
-                    if (typeof baseKlinesRaw === 'string') {
-                        try { baseKlines = JSON.parse(baseKlinesRaw); } catch(e) { baseKlines = []; }
-                    } else if (Array.isArray(baseKlinesRaw)) {
-                        baseKlines = baseKlinesRaw;
+                    const raw = stock.Klines;
+                    if (typeof raw === 'string') {
+                        try { baseKlines = JSON.parse(raw); } catch(e) { baseKlines = []; }
+                    } else if (Array.isArray(raw)) {
+                        baseKlines = raw;
                     }
-                    let chartKlines = baseKlines;
-                    if (isMarket && liveData && liveData.Latest_Price) {
+
+                    // 解析昨日完整 bar（Yesterday_Bar，向下相容：若無則從 Klines 取最後一根）
+                    let yesterdayBar = null;
+                    const ybRaw = stock.Yesterday_Bar;
+                    if (ybRaw) {
+                        try { yesterdayBar = typeof ybRaw === 'string' ? JSON.parse(ybRaw) : ybRaw; } catch(e) {}
+                    }
+
+                    const isIntraday   = state === 'INTRADAY';
+                    const isPostMarket = state === 'POST_MARKET';
+
+                    if (isIntraday && liveData && liveData.price > 0) {
                         const todayDate = new Date();
-                        const mm = String(todayDate.getMonth() + 1).padStart(2, '0');
-                        const dd = String(todayDate.getDate()).padStart(2, '0');
-                        const todayStr = `${mm}-${dd}`;
+                        const todayStr = `${String(todayDate.getMonth()+1).padStart(2,'0')}-${String(todayDate.getDate()).padStart(2,'0')}`;
                         const liveCandle = {
                             date: todayStr + ' (即時)',
-                            open: parseFloat(liveData.Today_Open || liveData.Latest_Price) || 0,
-                            close: parseFloat(liveData.Latest_Price) || 0,
-                            low: parseFloat(liveData.Today_Low || liveData.Latest_Price) || 0,
-                            high: parseFloat(liveData.Today_High || liveData.Latest_Price) || 0,
-                            volume: parseInt(liveData.Today_Volume || 0)
+                            open:   parseFloat(liveData.today_open  || liveData.price) || 0,
+                            close:  parseFloat(liveData.price) || 0,
+                            low:    parseFloat(liveData.today_low   || liveData.price) || 0,
+                            high:   parseFloat(liveData.today_high  || liveData.price) || 0,
+                            volume: parseInt(liveData.today_volume  || 0)
                         };
-                        if (baseKlines.length > 0) {
-                            const lastBaseDay = (baseKlines[baseKlines.length-1].date || '').split(' ')[0];
-                            if (lastBaseDay === todayStr) {
-                                chartKlines = baseKlines;
-                            } else {
-                                chartKlines = [...baseKlines, liveCandle];
-                            }
-                        } else {
-                            chartKlines = [liveCandle];
-                        }
+                        // 歷史 + 昨天 + 今日即時
+                        const withYest = yesterdayBar ? [...baseKlines, yesterdayBar] : baseKlines;
+                        const chartKlines = [...withYest, liveCandle];
+                        return { chartKlines };
+                    } else if (isPostMarket || (!isIntraday && yesterdayBar)) {
+                        // 盤後或週末：歷史 + 昨天（已確認完整）
+                        const chartKlines = yesterdayBar ? [...baseKlines, yesterdayBar] : baseKlines;
+                        return { chartKlines };
+                    } else {
+                        // 盤前：只顯示歷史 Klines，不含昨天（昨天尚未被今日 bar 確認為前高）
+                        return { chartKlines: baseKlines };
                     }
-                    return { chartKlines };
                 }
 
                 const toggleRow = (symbol) => {
@@ -833,13 +874,17 @@
                     const stock = mergedStocks.value.find(s => s.Symbol === symbol);
                     if (!stock || !stock.Klines) return;
                     
-                    const baseKlinesRaw = stock.Klines;
                     const liveD = rtdbQuotes.value[symbol];
-                    const eff = getEffectiveChartKlinesAndPreMetrics(baseKlinesRaw, liveD, isMarketOpen.value);
+                    const curState = marketState.value.state;
+                    const eff = getEffectiveChartKlinesAndPreMetrics(stock, liveD, curState);
                     const chartKlines = eff.chartKlines;
-                    // 直接用 stock 裡的權威 Max_High（後端 batch/seed 用完整歷史 + 從最新收盤 bar 之前算好）
-                    const computedMaxHigh = stock.Max_High || 0;
-                    let livePriceForCalc = (liveD && liveD.Latest_Price) ? liveD.Latest_Price : (chartKlines.length ? chartKlines[chartKlines.length-1].close : stock.Latest_Price);
+                    // 前高 = 排除最新K線之外的最高點
+                    //   INTRADAY：最新K線 = 今日live bar → 前高包含昨天 = Effective_Max_High
+                    //   其他狀態：最新K線 = 昨天 → 前高不含昨天 = Historical_Max_High
+                    const computedMaxHigh = curState === 'INTRADAY'
+                        ? (parseFloat(stock.Effective_Max_High  || stock.Max_High) || 0)
+                        : (parseFloat(stock.Historical_Max_High || stock.Max_High) || 0);
+                    let livePriceForCalc = (liveD && liveD.price) ? liveD.price : (chartKlines.length ? chartKlines[chartKlines.length-1].close : stock.Latest_Price);
 
                     const chartDom = document.getElementById('chart-' + symbol);
                     if (!chartDom) return;
@@ -910,7 +955,7 @@
                                         return Math.max(0, value.min - diff * 0.1).toFixed(2);
                                     },
                                     max: function (value) { 
-                                        let maxVal = Math.max(value.max, stock.Max_High || 0);
+                                        let maxVal = Math.max(value.max, parseFloat(stock.Effective_Max_High || stock.Max_High) || 0);
                                         let diff = maxVal - value.min;
                                         if (diff === 0) diff = maxVal * 0.01;
                                         return (maxVal + diff * 0.1).toFixed(2);
@@ -948,7 +993,7 @@
                                         return Math.max(0, value.min - diff * 0.1).toFixed(2);
                                     },
                                     max: function (value) { 
-                                        let maxVal = Math.max(value.max, stock.Max_High || 0);
+                                        let maxVal = Math.max(value.max, parseFloat(stock.Effective_Max_High || stock.Max_High) || 0);
                                         let diff = maxVal - value.min;
                                         if (diff === 0) diff = maxVal * 0.01;
                                         return (maxVal + diff * 0.1).toFixed(2);

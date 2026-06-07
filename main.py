@@ -82,43 +82,22 @@ class YFBackendEngine:
     def get_yf_symbol(self, code, market):
         return f"{code}.TWO" if market == "櫃" else f"{code}.TW"
 
-    def update_firebase_status(self, is_open):
-        if not self.db_firestore: return
+    def _update_market_state(self, state):
+        """更新 RTDB market_state 節點（取代舊的 Firestore System/Status）"""
+        if not FIREBASE_RTDB_URL: return
         try:
-            self.db_firestore.collection("System").document("Status").set({
-                "isMarketOpen": is_open,
-                "lastUpdate": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            rtdb.reference("market_state").update({
+                "date": datetime.now().strftime('%Y-%m-%d'),
+                "state": state,
+                "is_open": state == "INTRADAY"
             })
         except: pass
 
     def reload_csv_to_memory(self):
+        """從 CSV 讀入記憶體。前高正確性由 run_daily_batch() 保證，此處只做讀取，不做任何計算修改。"""
         if os.path.exists(DAILY_LIST_FILE):
             df = pd.read_csv(DAILY_LIST_FILE, dtype={'Symbol': str}).fillna("")
             self.yf_to_fugle = {str(row['YF_Symbol']): row.to_dict() for _, row in df.iterrows()}
-            # 後處理：利用 daily 產生時已存的 Klines（最近 ~60 根，包含最新 bar 的 high）修正前高。
-            # 如果 Klines 裡出現比存檔 Max_High 更高的點（表示產生 csv 當天那根 bar 創新高），就把記憶體中的 Max_High 升級為該最近高點，
-            # 並以 Klines 尾端為基準重新算 Days_Since_High（0 表示就在「最新 bar」=給隔天看的「昨天」）。
-            # 只升級不降級，安全：舊的歷史 ATH（>60天前）仍保留正確的 Max_High（Klines 裡不會有更高）。
-            # 這讓即使 csv 是用舊邏輯產的，當前 run 的 in-memory + seed + live dist 計算也正確，不用等下次 daily。
-            # 根源邏輯已在 daily batch 裡乾淨重寫（不再排除最新 K 線算 max + 取最近一次達到峰值的 idx）。
-            for yf_sym, row in list(self.yf_to_fugle.items()):
-                try:
-                    kl_str = row.get('Klines') or '[]'
-                    kl = json.loads(kl_str) if isinstance(kl_str, str) else kl_str
-                    if kl and isinstance(kl, list):
-                        highs = [float(k.get('high', 0) or 0) for k in kl]
-                        if highs:
-                            recent_max = max(highs)
-                            stored_max = float(row.get('Max_High', 0) or 0)
-                            if recent_max > stored_max + 0.01:
-                                row['Max_High'] = round(recent_max, 2)
-                                # 從 kl 尾端（最新 bar）往前找最後一次出現該 high 的位置
-                                for i in range(len(kl) - 1, -1, -1):
-                                    if abs(float(kl[i].get('high', 0) or 0) - recent_max) < 0.01:
-                                        row['Days_Since_High'] = len(kl) - 1 - i
-                                        break
-                except Exception:
-                    pass
         else:
             self.yf_to_fugle = {}
 
@@ -173,19 +152,17 @@ class YFBackendEngine:
                     c_price = price
                     change = msg.get('change', 0)
                     change_pct = msg.get('change_percent', 0)
-                    if c_price > 0 and self.db_firestore:
+                    if c_price > 0:
                         try:
                             idx_data = {
-                                "price": round(c_price, 2), 
-                                "change": round(change, 2), 
-                                "changePct": round(change_pct, 2), 
-                                "time": datetime.now().strftime('%H:%M:%S'),
-                                "source": "yf"
+                                "price": round(c_price, 2),
+                                "change": round(change, 2),
+                                "changePct": round(change_pct, 2),
+                                "time": datetime.now().strftime('%H:%M:%S')
                             }
-                            # 只寫 YF 專用路徑，讓富果和YF各自獨立更新跳動，方便比較誰更準
-                            rtdb.reference("System/Index/YF").update(idx_data)
+                            rtdb.reference("market_state/index/YF").update(idx_data)
                             print(f"[YF WS Index] pushed @ {datetime.now().strftime('%H:%M:%S')} price={idx_data.get('price')}")
-                        except Exception as e: 
+                        except Exception as e:
                             print(f"[YF WS Index] push error: {e}")
                     return
 
@@ -202,49 +179,41 @@ class YFBackendEngine:
                 sym = str(row['Symbol'])
                 
                 if sym not in self.live_intraday_tracker:
-                    self.live_intraday_tracker[sym] = {'open': price, 'high': price, 'low': price, 'vol': 0}
-                
+                    # open 初始為 0，等待 day_open 欄位或 Fugle API 填入真實開盤價，避免用第一筆 tick 當作開盤價
+                    self.live_intraday_tracker[sym] = {'open': 0, 'high': 0, 'low': float('inf'), 'vol': 0}
+
                 tracker = self.live_intraday_tracker[sym]
-                if msg.get('day_open'): tracker['open'] = float(msg['day_open'])
-                if msg.get('day_high'): tracker['high'] = float(msg['day_high'])
-                else: tracker['high'] = max(tracker['high'], price)
-                if msg.get('day_low'): tracker['low'] = float(msg['day_low'])
-                else: tracker['low'] = min(tracker['low'], price)
-                if msg.get('day_volume'): tracker['vol'] = int(msg['day_volume'])
-
-                base_ref = float(row.get('Latest_Price', price))  # 修正：當日漲幅應以「前日收盤」(csv Latest_Price) 為基準，而非 Ref_Close（快照日前一日）
-                base_5d = float(row.get('Base_5D', price))
-                base_10d = float(row.get('Base_10D', price))
-                base_20d = float(row.get('Base_20D', price))
-                max_high = float(row.get('Max_High', price))
-
-                t_return = ((price - base_ref) / base_ref) * 100 if base_ref > 0 else 0.0
-                ret_5d = ((price - base_5d) / base_5d) * 100 if base_5d > 0 else 0.0
-                ret_10d = ((price - base_10d) / base_10d) * 100 if base_10d > 0 else 0.0
-                ret_20d = ((price - base_20d) / base_20d) * 100 if base_20d > 0 else 0.0
-                # 統一距離前高公式：(price - max_high) / min(price, max_high) * 100 ，正負都有
-                if max_high > 0 and price > 0:
-                    denom = min(price, max_high)
-                    raw_dist = (price - max_high) / denom * 100
+                # 優先用 day_open 欄位取得真實開盤價
+                if msg.get('day_open'):
+                    tracker['open'] = float(msg['day_open'])
+                if msg.get('day_high'):
+                    tracker['high'] = float(msg['day_high'])
                 else:
-                    raw_dist = 0.0
+                    tracker['high'] = max(tracker['high'], price) if tracker['high'] > 0 else price
+                if msg.get('day_low'):
+                    tracker['low'] = float(msg['day_low'])
+                else:
+                    tracker['low'] = min(tracker['low'], price) if tracker['low'] < float('inf') else price
+                if msg.get('day_volume'):
+                    tracker['vol'] = int(msg['day_volume'])
+
+                # 當日漲幅以昨日收盤為基準（Yesterday_Close 新欄位，向下相容舊欄位 Latest_Price）
+                base_ref = float(row.get('Yesterday_Close') or row.get('Latest_Price') or price)
+                t_return = ((price - base_ref) / base_ref) * 100 if base_ref > 0 else 0.0
+
+                open_val = tracker['open'] if tracker['open'] > 0 else None
+                high_val = tracker['high'] if tracker['high'] > 0 else None
+                low_val  = tracker['low']  if tracker['low'] < float('inf') else None
 
                 with self.ws_lock:
                     self.rtdb_ws_buffer[sym] = {
-                        "Latest_Price": round(float(price), 2),
-                        "Today_Open": round(tracker['open'], 2),
-                        "Today_High": round(tracker['high'], 2),
-                        "Today_Low": round(tracker['low'], 2),
-                        "Today_Volume": tracker['vol'],
-                        "Today_Return": round(t_return, 2),
-                        "Return_5D": round(ret_5d, 2),
-                        "Return_10D": round(ret_10d, 2),
-                        "Return_20D": round(ret_20d, 2),
-                        "Breakout_Margin": round(raw_dist, 2) if raw_dist >= 0 else None,
-                        "Distance_To_High": round(raw_dist, 2),
-                        "Max_High": round(float(row.get('Max_High', price)), 2),
-                        "Days_Since_High": int(row.get('Days_Since_High', 0) or 0),
-                        "lastUpdate": int(time.time() * 1000)
+                        "price": round(float(price), 2),
+                        "today_open":   round(open_val, 2) if open_val else None,
+                        "today_high":   round(high_val, 2) if high_val else None,
+                        "today_low":    round(low_val,  2) if low_val  else None,
+                        "today_volume": tracker['vol'],
+                        "today_return_pct": round(t_return, 2),
+                        "ts": int(time.time() * 1000)
                     }
                     self.last_yf_tick[sym] = time.time()
                     self.yf_ticked_symbols.add(sym)
@@ -311,46 +280,23 @@ class YFBackendEngine:
         self._start_yf_fallback_seeder()
 
     def _seed_pre_open(self, yf_sym):
-        """為單一 symbol seed 初始到 buffer：Latest=日批最後已知價，但 Today_*=0 讓前端 hasLiveData 真實判斷不觸發假今天K線（避免昨天重複K bug）"""
+        """為單一 symbol seed 初始到 buffer：price/today_* 全部歸零，讓前端判斷為尚無盤中資料。
+        歷史欄位（Max_High, Klines, Yesterday_*, Returns 等）完全不寫 RTDB，由 Firestore 靜態資料提供。"""
         if yf_sym not in self.yf_to_fugle:
             return
         row = self.yf_to_fugle[yf_sym]
         sym = str(row['Symbol'])
-        base_price = float(row.get('Latest_Price', 0) or 0)
-        # 當日漲幅 pre-seed 用 csv Latest_Price 作 base → 0% （新的一天開盤前當日漲幅應為 0，之後 yf tick 會更新為真實 (現價-昨收)）
-        base_ref = float(row.get('Latest_Price', base_price) or base_price)
-        base_5d = float(row.get('Base_5D', base_price) or base_price)
-        base_10d = float(row.get('Base_10D', base_price) or base_price)
-        base_20d = float(row.get('Base_20D', base_price) or base_price)
-        max_high = float(row.get('Max_High', base_price) or base_price)
-        t_return = ((base_price - base_ref) / base_ref) * 100 if base_ref > 0 else 0.0
-        ret_5d = ((base_price - base_5d) / base_5d) * 100 if base_5d > 0 else 0.0
-        ret_10d = ((base_price - base_10d) / base_10d) * 100 if base_10d > 0 else 0.0
-        ret_20d = ((base_price - base_20d) / base_20d) * 100 if base_20d > 0 else 0.0
-        # 統一前高距離公式 (seed 用 snapshot base_price)
-        if max_high > 0 and base_price > 0:
-            denom = min(base_price, max_high)
-            raw_dist = (base_price - max_high) / denom * 100
-        else:
-            raw_dist = 0.0
         with self.ws_lock:
             self.rtdb_ws_buffer[sym] = {
-                "Latest_Price": round(base_price, 2),
-                "Today_Open": 0,
-                "Today_High": 0,
-                "Today_Low": 0,
-                "Today_Volume": 0,
-                "Today_Return": round(t_return, 2),
-                "Return_5D": round(ret_5d, 2),
-                "Return_10D": round(ret_10d, 2),
-                "Return_20D": round(ret_20d, 2),
-                "Breakout_Margin": round(raw_dist, 2) if raw_dist >= 0 else None,
-                "Distance_To_High": round(raw_dist, 2),
-                "Max_High": round(float(row.get('Max_High', base_price)), 2),
-                "Days_Since_High": int(row.get('Days_Since_High', 0) or 0),
-                "lastUpdate": int(time.time() * 1000)
+                "price": 0,
+                "today_open": None,
+                "today_high": None,
+                "today_low": None,
+                "today_volume": 0,
+                "today_return_pct": 0,
+                "ts": int(time.time() * 1000)
             }
-            self.last_yf_tick[sym] = 0  # pre-seed, not a real yf tick
+            self.last_yf_tick[sym] = time.time()
             # do not add to yf_ticked_symbols (only real yf message_handler does)
 
     def _start_yf_status_reporter(self):
@@ -373,21 +319,32 @@ class YFBackendEngine:
         threading.Thread(target=reporter, daemon=True).start()
 
     def _start_yf_fallback_seeder(self):
-        """3min 後 + 每5min 對仍無 yf tick 的檔，用富果 quote 補 seed 真實今日 OHLC/價（paced <60/min），讓 100% 都有 live_quotes 資料。YF 後續 tick 會自然 overwrite。"""
+        """每3分鐘對「從未收到 YF tick」的 silent + 「已 active 但 >90s 沒新 tick」的 delayed，用富果 /intraday/quote 補或刷新真實今日 OHLC/價/量（1.1s pacing，單輪上限150檔）。
+        這樣即使 YF WS 對部分台股 tick 不頻繁，也能讓多數 live_quotes 定期有新 lastUpdate，減少「資料沒在動」的感覺。YF 真實 tick 隨時會 overwrite。"""
         def fallback_loop():
             # 第一次等 yf 盡量送（很多檔第一筆要花時間）
             time.sleep(180)
             while True:
                 try:
                     if not self.fugle_headers:
-                        time.sleep(300); continue
+                        time.sleep(180); continue
                     expected = [yf for yf in self.yf_to_fugle.keys() if yf != "^TWII"]
+                    now = time.time()
                     silent = [yf for yf in expected if yf not in self.active_yf_stocks]
-                    if silent:
-                        print(f"[YF Fallback] 開始為 {len(silent)} 檔 yf-靜默者用富果 quote 補資料（1.1s/檔）...")
-                        seeded = 0
-                        for yfs in silent:
-                            if yfs in self.active_yf_stocks: continue
+                    delayed = []
+                    last_tick_map = getattr(self, 'last_yf_tick', {})
+                    for yf in expected:
+                        if yf in self.active_yf_stocks:
+                            ts = last_tick_map.get(yf, 0) or 0
+                            if ts > 0 and (now - ts > 90):
+                                delayed.append(yf)
+                    targets = list(dict.fromkeys(silent + delayed))  # dedup, silent first
+                    if targets:
+                        max_this_cycle = 150
+                        to_do = targets[:max_this_cycle]
+                        print(f"[YF Fallback] 開始為 {len(silent)} 靜默 + {len(delayed)} 延遲(>90s) 檔 補/刷新資料（1.1s/檔，上限{max_this_cycle}）...")
+                        refreshed = 0
+                        for yfs in to_do:
                             row = self.yf_to_fugle.get(yfs) or {}
                             sym = str(row.get('Symbol', ''))
                             if not sym: continue
@@ -402,53 +359,32 @@ class YFBackendEngine:
                                 h = float(q.get('highPrice') or last_p)
                                 l = float(q.get('lowPrice') or last_p)
                                 v = int((q.get('total') or {}).get('tradeVolume') or 0)
-                                # fallback 提供的「當日」也應使用 csv Latest_Price 作為昨收基準（而非 Ref_Close）
-                                base_ref = float(row.get('Latest_Price', last_p) or last_p)
-                                base_5d = float(row.get('Base_5D', last_p) or last_p)
-                                base_10d = float(row.get('Base_10D', last_p) or last_p)
-                                base_20d = float(row.get('Base_20D', last_p) or last_p)
-                                max_high = float(row.get('Max_High', last_p) or last_p)
+                                # fallback 提供的「當日」也應使用 csv Latest_Price 作為昨收基準
+                                base_ref = float(row.get('Yesterday_Close') or row.get('Latest_Price') or last_p)
                                 t_return = ((last_p - base_ref) / base_ref) * 100 if base_ref > 0 else 0.0
-                                ret_5d = ((last_p - base_5d) / base_5d) * 100 if base_5d > 0 else 0.0
-                                ret_10d = ((last_p - base_10d) / base_10d) * 100 if base_10d > 0 else 0.0
-                                ret_20d = ((last_p - base_20d) / base_20d) * 100 if base_20d > 0 else 0.0
-                                # 統一前高距離 (fallback)
-                                if max_high > 0 and last_p > 0:
-                                    denom = min(last_p, max_high)
-                                    raw_dist = (last_p - max_high) / denom * 100
-                                else:
-                                    raw_dist = 0.0
                                 with self.ws_lock:
                                     self.rtdb_ws_buffer[sym] = {
-                                        "Latest_Price": round(last_p, 2),
-                                        "Today_Open": round(o, 2),
-                                        "Today_High": round(h, 2),
-                                        "Today_Low": round(l, 2),
-                                        "Today_Volume": v,
-                                        "Today_Return": round(t_return, 2),
-                                        "Return_5D": round(ret_5d, 2),
-                                        "Return_10D": round(ret_10d, 2),
-                                        "Return_20D": round(ret_20d, 2),
-                                        "Breakout_Margin": round(raw_dist, 2) if raw_dist >= 0 else None,
-                                        "Distance_To_High": round(raw_dist, 2),
-                                        "Max_High": round(float(row.get('Max_High', last_p)), 2),
-                                        "Days_Since_High": int(row.get('Days_Since_High', 0) or 0),
-                                        "lastUpdate": int(time.time() * 1000)
+                                        "price": round(last_p, 2),
+                                        "today_open":   round(o, 2) if o > 0 else None,
+                                        "today_high":   round(h, 2) if h > 0 else None,
+                                        "today_low":    round(l, 2) if l > 0 else None,
+                                        "today_volume": v,
+                                        "today_return_pct": round(t_return, 2),
+                                        "ts": int(time.time() * 1000)
                                     }
-                                seeded += 1
-                                # 也標記 active，避免重複
-                                self.active_yf_stocks.add(yfs)
-                                self.last_yf_tick[sym] = time.time()  # treat fallback poll as an "update" for staleness (but not for yf_ticked)
-                                print(f"[YF Fallback] seeded {sym} last={last_p} ohl=({o},{h},{l}) vol={v}")
+                                refreshed += 1
+                                if yfs not in self.active_yf_stocks:
+                                    self.active_yf_stocks.add(yfs)
+                                self.last_yf_tick[sym] = time.time()
                             except Exception as ee:
                                 pass
-                        if seeded:
-                            print(f"[YF Fallback] 本輪補 {seeded} 檔（總 active 現在 {len(self.active_yf_stocks)}）")
+                        if refreshed:
+                            print(f"[YF Fallback] 本輪補/刷新 {refreshed} 檔（silent {len(silent)} + delayed {len(delayed)}，總 active 現在 {len(self.active_yf_stocks)}）")
                     else:
-                        print("[YF Fallback] 目前無靜默檔，全部由 YF WS 提供即時資料")
+                        print("[YF Fallback] 目前無靜默也無長延遲檔，全部由 YF WS 提供即時資料")
                 except Exception as e:
                     print(f"[YF Fallback] loop error: {e}")
-                time.sleep(300)  # 每 5 分鐘檢查一次仍靜默者
+                time.sleep(180)  # 每 3 分鐘檢查/刷新一次（更頻繁讓資料保持移動）
         threading.Thread(target=fallback_loop, daemon=True).start()
 
     def start_fugle_index_websocket(self):
@@ -495,11 +431,9 @@ class YFBackendEngine:
                                     "price": round(c_price, 2),
                                     "change": round(change, 2),
                                     "changePct": round(change_pct, 2),
-                                    "time": datetime.now().strftime('%H:%M:%S'),
-                                    "source": "fugle"
+                                    "time": datetime.now().strftime('%H:%M:%S')
                                 }
-                                rtdb.reference("System/Index/Fugle").update(fugle_data)
-                                # 僅寫獨立 /Fugle 路徑，與 YF 的 /YF 各自獨立更新跳動，前端分開顯示以比較誰更準（不再覆寫 root）
+                                rtdb.reference("market_state/index/Fugle").update(fugle_data)
                                 print(f"[Fugle Index WS] pushed @ {datetime.now().strftime('%H:%M:%S')} price={fugle_data.get('price')}")
                             except Exception as e: 
                                 print(f"[Fugle Index WS] push error: {e}")
@@ -526,6 +460,30 @@ class YFBackendEngine:
     def check_is_market_open_today(self):
         now = datetime.now()
         return now.weekday() < 5
+
+    def get_actual_market_open_from_fugle(self):
+        """暫時使用富果 /intraday/quote/IX0001 的 lastUpdated 來判斷是否有實際交易跳動（開盤資訊）。
+        如果 lastUpdated 在最近幾分鐘內有更新，視為開盤中（有跳動）。
+        參考 llms-full.txt 中 quote 回應的 lastUpdated 等欄位。
+        """
+        if not self.fugle_headers:
+            return self.check_is_market_open_today() and 900 <= int(datetime.now().strftime("%H%M")) <= 1330
+        try:
+            res = requests.get(f"{self.fugle_base_url}/intraday/quote/IX0001", headers=self.fugle_headers, timeout=6)
+            if res.status_code == 200:
+                d = res.json() or {}
+                lu = d.get("lastUpdated") or 0
+                if lu > 0:
+                    last_sec = lu / 1_000_000.0  # microseconds since epoch
+                    age = time.time() - last_sec
+                    dt = datetime.fromtimestamp(last_sec)
+                    is_trading_hour = (dt.hour > 9 or (dt.hour == 9 and dt.minute >= 0)) and (dt.hour < 13 or (dt.hour == 13 and dt.minute <= 30))
+                    if age < 300 and is_trading_hour:  # 5 分鐘內有更新 且 在交易時段
+                        return True
+            return False
+        except Exception as e:
+            print(f"[Fugle 開盤狀態] 查詢失敗: {e}")
+            return False
 
     def get_taiwan_stock_list(self):
         tickers = []
@@ -654,8 +612,21 @@ class YFBackendEngine:
                     time.sleep(60)
         return stock_list
 
+    def _get_latest_trading_day(self):
+        """取得最近的台股交易日（往前找，跳過週六日）。用於驗證 yfinance 下載資料的最新 bar 日期。"""
+        d = datetime.now()
+        # 若時間在 13:30 前且是平日，最近交易日可能是昨天（今天的 bar 尚未完整）
+        # 我們在 13:35 執行，所以今天的 bar 應已完整
+        if d.weekday() == 5:   # 週六 → 最近交易日是週五
+            d -= timedelta(days=1)
+        elif d.weekday() == 6: # 週日 → 最近交易日是週五
+            d -= timedelta(days=2)
+        return d.strftime('%Y-%m-%d')
+
     def run_daily_batch(self):
-        print(f"\n=== 啟動過濾引擎 (13:35 Daily Batch - YFinance架構) ===")
+        batch_date = datetime.now().strftime('%Y-%m-%d')
+        expected_last_bar = self._get_latest_trading_day()
+        print(f"\n=== 啟動過濾引擎 (Daily Batch - {batch_date}, 預期最新 bar: {expected_last_bar}) ===")
         all_stocks = self.get_taiwan_stock_list()
         
         if not all_stocks: 
@@ -695,7 +666,23 @@ class YFBackendEngine:
                         
                     df_stock = df_stock.dropna(subset=['Close'])
                     if len(df_stock) < 20: continue
-                    
+
+                    # 驗證最新 bar 日期：若 yfinance 資料尚未更新（stale），跳過此檔避免 OHLC 錯誤
+                    last_bar_date = df_stock.index[-1].strftime('%Y-%m-%d')
+                    if last_bar_date != expected_last_bar:
+                        print(f"   ⚠️ [{symbol}] yfinance 最新 bar 是 {last_bar_date}，預期 {expected_last_bar}，跳過（資料尚未更新）")
+                        continue
+
+                    # 驗證最新 bar 的 OHLC 完整性（防止 NaN 導致圖表 K 線資料明顯錯誤）
+                    last_row = df_stock.iloc[-1]
+                    has_nan = any(
+                        last_row[c] != last_row[c]  # NaN check
+                        for c in ['Open', 'High', 'Low', 'Close']
+                    )
+                    if has_nan:
+                        print(f"   ⚠️ [{symbol}] 最新 bar OHLC 有 NaN，跳過")
+                        continue
+
                     df = pd.DataFrame({
                         'date': df_stock.index.strftime('%Y-%m-%d'),
                         'open': df_stock['Open'].astype(float),
@@ -704,91 +691,125 @@ class YFBackendEngine:
                         'close': df_stock['Close'].astype(float),
                         'volume': df_stock['Volume'].astype(float)
                     }).reset_index(drop=True)
-                    
+
                     ma5 = df['close'].rolling(5).mean().iloc[-1]
                     ma10 = df['close'].rolling(10).mean().iloc[-1]
                     ma20 = df['close'].rolling(20).mean().iloc[-1]
-                    
-                    latest_close = round(float(df['close'].iloc[-1]), 2)
-                    
-                    # 統一邏輯：前高定義永遠從「現有 K 線圖的倒數第二根」起算（最新 bar 不算入前高）。
-                    # Firestore 資料優先，RTDB 附加最新 bar（如果更「新的一天」）。
-                    # 無論 batch 或 live view，前高 / 漲幅 base 都基於「K線倒數第二根」之前的歷史。
-                    if len(df) > 0:
-                        pre_df = df.iloc[:-1] if len(df) > 1 else df
-                        if len(pre_df) > 0:
-                            max_high_val = float(pre_df['high'].max())
-                            prev_max_high = round(max_high_val, 2)
-                            recent_high_idx = pre_df[pre_df['high'] == max_high_val].index[-1]
-                            days_since_high = int(len(pre_df) - 1 - recent_high_idx)
-                        else:
-                            prev_max_high = latest_close
-                            days_since_high = 0
-                        if len(df) > 1:
-                            yesterday_close = round(float(df['close'].iloc[-2]), 2)
-                        else:
-                            yesterday_close = latest_close
+
+                    df_last = df.iloc[-1]
+                    yesterday_close = round(float(df_last['close']), 2)   # 今天收盤 = 明天的「昨日收盤」
+                    yesterday_open  = round(float(df_last['open']), 2)
+                    yesterday_high  = round(float(df_last['high']), 2)
+                    yesterday_low   = round(float(df_last['low']), 2)
+                    yesterday_vol   = int(df_last['volume'])
+
+                    # Historical_Max_High：今天以前（不含今天）的最高點，明天盤前用
+                    pre_df = df.iloc[:-1] if len(df) > 1 else df
+                    if len(pre_df) > 0:
+                        max_high_val = float(pre_df['high'].max())
+                        historical_max_high = round(max_high_val, 2)
+                        recent_high_idx = int(pre_df[pre_df['high'] == max_high_val].index[-1])
+                        days_since_high = int(len(pre_df) - recent_high_idx)
                     else:
-                        yesterday_close = latest_close
-                        prev_max_high = latest_close
+                        historical_max_high = yesterday_close
                         days_since_high = 0
 
-                    if latest_close > 0 and prev_max_high > 0 and (latest_close * 1.1 >= prev_max_high):
-                        
-                        close_5d = round(float(df['close'].iloc[-6]) if len(df) >= 6 else df['close'].iloc[0], 2)
-                        close_10d = round(float(df['close'].iloc[-11]) if len(df) >= 11 else df['close'].iloc[0], 2)
-                        close_20d = round(float(df['close'].iloc[-21]) if len(df) >= 21 else df['close'].iloc[0], 2)
-                        
-                        def calc_return(current, old): 
-                            return ((current - old) / old) * 100 if old > 0 else 0.0
+                    # Effective_Max_High：含今天在內的最高點，明天盤中用
+                    effective_max_high = round(max(historical_max_high, yesterday_high), 2)
 
-                        today_return = calc_return(latest_close, yesterday_close)
-                        # 統一前高距離邏輯： (close - 前高) / min(close, 前高) * 100 ，有正有負
-                        # 作為唯一的「距離前高」數字（正=突破，負=距下）
-                        if prev_max_high > 0 and latest_close > 0:
-                            denom = min(latest_close, prev_max_high)
-                            raw_dist = (latest_close - prev_max_high) / denom * 100
-                        else:
-                            raw_dist = 0.0
-                        
-                        df_chart = df.tail(60)
-                        klines = [{
-                            "date": str(r['date'])[:10].split('-', 1)[1], 
-                            "open": round(float(r['open']), 2), 
-                            "close": round(float(r['close']), 2), 
-                            "low": round(float(r['low']), 2), 
-                            "high": round(float(r['high']), 2), 
-                            "volume": int(r['volume'])
-                        } for _, r in df_chart.iterrows()]
-                        df_last = df.iloc[-1]
-                        
-                        today_open = round(float(df_last['open']), 2)
-                        today_high = round(float(df_last['high']), 2)
-                        today_low = round(float(df_last['low']), 2)
-                        today_vol = int(df_last['volume'])
-                        
-                        rating = self.fetch_yfinance_rating(yf_sym)
-                        
-                        breakout_list.append({
-                            "Industry": stock['industry'], "Symbol": symbol, "Name": stock['name'],
-                            "Latest_Price": latest_close, "Today_Open": today_open, "Today_High": today_high, "Today_Low": today_low, "Today_Volume": today_vol,
-                            "Max_High": prev_max_high, "Days_Since_High": days_since_high, 
-                            
-                            "Ref_Close": yesterday_close,
-                            "Base_5D": close_5d,
-                            "Base_10D": close_10d,
-                            "Base_20D": close_20d,
-                            
-                            "Today_Return": round(today_return, 2), 
-                            "Return_5D": round(calc_return(latest_close, close_5d), 2), 
-                            "Return_10D": round(calc_return(latest_close, close_10d), 2), 
-                            "Return_20D": round(calc_return(latest_close, close_20d), 2),
-                            "Breakout_Margin": round(raw_dist, 2) if raw_dist >= 0 else None, "Distance_To_High": round(raw_dist, 2),
-                            
-                            "Status_Tags": "-",
-                            "Rating": rating, "Company_Info": "", "YF_Symbol": yf_sym,
-                            "MA5": round(ma5, 2), "MA10": round(ma10, 2), "MA20": round(ma20, 2), "Klines": json.dumps(klines)
-                        })
+                    # Effective_Days_Since_High：與 Effective_Max_High 對應的天數
+                    # 若昨天(Today bar)就是最高點，天數為 0（最新一根 bar 就是前高）
+                    effective_days_since_high = 0 if effective_max_high > historical_max_high else days_since_high
+
+                    # 篩選條件：昨日收盤在歷史前高（不含昨天）的 110% 以內（接近或突破前高不超過 10%）
+                    if not (yesterday_close > 0 and historical_max_high > 0 and (yesterday_close * 1.1 >= historical_max_high)):
+                        continue
+
+                    close_5d  = round(float(df['close'].iloc[-6])  if len(df) >= 6  else df['close'].iloc[0], 2)
+                    close_10d = round(float(df['close'].iloc[-11]) if len(df) >= 11 else df['close'].iloc[0], 2)
+                    close_20d = round(float(df['close'].iloc[-21]) if len(df) >= 21 else df['close'].iloc[0], 2)
+
+                    def calc_return(current, old):
+                        return ((current - old) / old) * 100 if old > 0 else 0.0
+
+                    # Klines：最近 60 根，**不含今天**（今天存在 Yesterday_Bar）
+                    df_chart = df.tail(61).iloc[:-1]  # 取 61 根再去掉最後一根（今天）= 60 根歷史
+                    klines = [{
+                        "date": str(r['date'])[:10].split('-', 1)[1],
+                        "open":   round(float(r['open']),   2),
+                        "close":  round(float(r['close']),  2),
+                        "low":    round(float(r['low']),    2),
+                        "high":   round(float(r['high']),   2),
+                        "volume": int(r['volume'])
+                    } for _, r in df_chart.iterrows()]
+
+                    # Yesterday_Bar：今天的完整 bar，獨立存放，前端根據市場狀態決定是否 append
+                    yesterday_bar = {
+                        "date":   df_last['date'][:10].split('-', 1)[1],
+                        "open":   yesterday_open,
+                        "close":  yesterday_close,
+                        "high":   yesterday_high,
+                        "low":    yesterday_low,
+                        "volume": yesterday_vol
+                    }
+
+                    # 距前高（歷史前高，不含昨天）：讓使用者看到昨天是否突破了之前的高點
+                    if historical_max_high > 0 and yesterday_close > 0:
+                        denom = min(yesterday_close, historical_max_high)
+                        raw_dist = (yesterday_close - historical_max_high) / denom * 100
+                    else:
+                        raw_dist = 0.0
+
+                    rating = self.fetch_yfinance_rating(yf_sym)
+
+                    breakout_list.append({
+                        "Industry": stock['industry'], "Symbol": symbol, "Name": stock['name'],
+
+                        # 批次資訊
+                        "Batch_Date": batch_date,
+
+                        # 昨日（今天）OHLCV — 明確命名，不再叫 Today_*
+                        "Yesterday_Close":  yesterday_close,
+                        "Yesterday_Open":   yesterday_open,
+                        "Yesterday_High":   yesterday_high,
+                        "Yesterday_Low":    yesterday_low,
+                        "Yesterday_Volume": yesterday_vol,
+
+                        # 前高（兩個版本）
+                        "Historical_Max_High":       historical_max_high,
+                        "Historical_Days_Since_High": days_since_high,
+                        "Effective_Max_High":         effective_max_high,
+                        "Effective_Days_Since_High":  effective_days_since_high,
+
+                        # 向下相容舊欄位（前端 fallback 用）
+                        "Latest_Price":    yesterday_close,
+                        "Max_High":        historical_max_high,          # 前高 = 排除昨天的歷史高點，讓圖表可看出昨天是否突破
+                        "Days_Since_High": days_since_high,              # 對應 Historical_Max_High 的天數
+
+                        # 多日漲幅基準
+                        "Ref_Close": round(float(df['close'].iloc[-2]), 2) if len(df) >= 2 else yesterday_close,
+                        "Base_5D":   close_5d,
+                        "Base_10D":  close_10d,
+                        "Base_20D":  close_20d,
+
+                        # 漲幅（以昨日收盤為基準）
+                        "Today_Return":  round(calc_return(yesterday_close, round(float(df['close'].iloc[-2]), 2) if len(df) >= 2 else yesterday_close), 2),
+                        "Return_5D":     round(calc_return(yesterday_close, close_5d),  2),
+                        "Return_10D":    round(calc_return(yesterday_close, close_10d), 2),
+                        "Return_20D":    round(calc_return(yesterday_close, close_20d), 2),
+
+                        # 距前高
+                        "Breakout_Margin": round(raw_dist, 2) if raw_dist >= 0 else None,
+                        "Distance_To_High": round(raw_dist, 2),
+
+                        # K 線（不含今天）
+                        "Klines": json.dumps(klines),
+                        "Yesterday_Bar": json.dumps(yesterday_bar),
+
+                        "Status_Tags": "-",
+                        "Rating": rating, "Company_Info": "", "YF_Symbol": yf_sym,
+                        "MA5": round(ma5, 2), "MA10": round(ma10, 2), "MA20": round(ma20, 2),
+                    })
                 except: pass
 
         if breakout_list:
@@ -905,43 +926,76 @@ class YFBackendEngine:
             print(f"✅ 13:35 盤後作業結束！共篩選出 {len(breakout_list)} 檔標的。")
 
     def run_auto_scheduler(self):
-        print("\n=== 啟動全自動無人值守模式 (YFinance K線 + 富果少量meta + 雙大盤來源比較) ===")
-        print("邏輯原則：13:35 YF批次K線過濾 + 富果ticker(注意/處置/當沖, 1.05s pacing) + Gemini AI速寫；盤中(8:00起)同時啟 YF WS (stocks + Index/YF) 與 Fugle Index WS (Index/Fugle) 寫 RTDB 供比較 (兩來源獨立路徑，前端只顯示單一主來源)")
-        
-        schedule_flags = {"1335": False}
+        print("\n=== 啟動全自動無人值守模式 ===")
+        print("狀態機：WEEKEND / PRE_MARKET / INTRADAY / POST_MARKET")
+        print("可隨時啟動在背景持續運行，自動跨日重置，無需精準 9 點觸發。")
+
+        def _load_last_batch_date():
+            if os.path.exists(DAILY_LIST_FILE):
+                try:
+                    mtime = os.path.getmtime(DAILY_LIST_FILE)
+                    return datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
+                except: pass
+            return None
+
+        last_batch_date = _load_last_batch_date()
+        last_known_date = datetime.now().strftime("%Y-%m-%d")
+        current_state = None
+        print(f"[排程] 啟動於 {datetime.now().strftime('%Y-%m-%d %H:%M')}，上次批次日期：{last_batch_date or '無'}")
 
         while True:
             now = datetime.now()
-            time_str = now.strftime("%H%M")
-            
-            if self.check_is_market_open_today() and (800 <= int(time_str) <= 1330):
-                self.update_firebase_status(True)
-                
+            today = now.strftime("%Y-%m-%d")
+            t = int(now.strftime("%H%M"))
+
+            # 跨日自動重置
+            if today != last_known_date:
+                print(f"[排程] 跨日重置：{last_known_date} → {today}")
+                self.live_intraday_tracker.clear()
+                self.reload_csv_to_memory()
+                last_known_date = today
+                # 若 WS 已啟動，重新 seed 所有標的盤中欄位歸零
+                if getattr(self, 'yf_ws_started', False) and hasattr(self, 'ws_lock'):
+                    for yf_sym in list(self.yf_to_fugle.keys()):
+                        try: self._seed_pre_open(yf_sym)
+                        except: pass
+
+            # 計算當前狀態
+            if now.weekday() >= 5:
+                new_state = "WEEKEND"
+            elif t < 800:
+                new_state = "PRE_MARKET"
+            elif 800 <= t < 900:
+                new_state = "PRE_MARKET"  # WS 預熱，市場未開
+            elif 900 <= t <= 1330:
+                actually_open = self.get_actual_market_open_from_fugle()
+                new_state = "INTRADAY" if actually_open else "PRE_MARKET"
+            else:
+                new_state = "POST_MARKET"
+
+            if new_state != current_state:
+                print(f"[排程] 狀態轉換：{current_state} → {new_state}")
+                current_state = new_state
+
+            # 啟動 WS（只啟動一次，斷線自動重連）
+            if new_state in ("PRE_MARKET", "INTRADAY"):
                 if not getattr(self, 'yf_ws_started', False):
                     self.start_yfinance_websocket()
                     self.yf_ws_started = True
-
                 if not getattr(self, 'fugle_index_ws_started', False):
                     self.start_fugle_index_websocket()
                     self.fugle_index_ws_started = True
-                    
-                time.sleep(30)
-            else:
-                self.update_firebase_status(False)
-                
-                if time_str == "1335" and not schedule_flags["1335"]:
-                    self.run_daily_batch()
-                    schedule_flags["1335"] = True
-                    self.yf_ws_started = False 
-                    self.fugle_index_ws_started = False 
-                
-                if time_str == "0005":
-                    schedule_flags = {"1335": False}
-                    self.live_intraday_tracker.clear()
-                    self.fugle_index_ws_started = False
-                    self.yf_ws_started = False 
-                    
-                time.sleep(30)
+
+            # 更新 RTDB market_state
+            self._update_market_state(new_state)
+
+            # 盤後批次：13:35 後執行，每日只跑一次（以 CSV 修改日期判斷）
+            if new_state == "POST_MARKET" and t >= 1335 and last_batch_date != today:
+                print(f"[排程] {now.strftime('%H:%M')} 觸發每日盤後 batch...")
+                self.run_daily_batch()
+                last_batch_date = today
+
+            time.sleep(30)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='台股強勢突破監控系統')
